@@ -11,12 +11,49 @@ export async function authRoutes(app: FastifyInstance) {
   const db = getDb()
   const userRepository = new UserRepository(db)
   const sessionRepository = new SessionRepository(db)
+
+  // DEBUG: Log to see if JWT methods exist
+  console.log('🔍 DEBUG: app.jwt exists?', !!app.jwt)
+  console.log('🔍 DEBUG: app.jwt.sign exists?', !!(app.jwt && app.jwt.sign))
+  console.log('🔍 DEBUG: app.jwtRefreshSign exists?', !!(app as any).jwtRefreshSign)
+
+  // JWT service wrappers with proper typing
+  const jwtService = {
+    sign: (payload: any, options?: any): string => {
+      console.log('🔑 Calling app.jwt.sign')
+      return app.jwt.sign(payload, options)
+    },
+    verify: (token: string): any => {
+      console.log('🔑 Calling app.jwt.verify')
+      return app.jwt.verify(token)
+    },
+  }
+
+  const jwtRefreshService = {
+    sign: (payload: any, options?: any): string => {
+      console.log('🔑 Calling app.jwtRefreshSign')
+      return (app as any).jwtRefreshSign(payload, options)
+    },
+    verify: (token: string): any => {
+      console.log('🔑 Calling app.jwtRefreshVerify')
+      return (app as any).jwtRefreshVerify(token)
+    },
+  }
+
+  console.log('✅ JWT services created:', {
+    jwtService: !!jwtService,
+    jwtRefreshService: !!jwtRefreshService,
+  })
+
   const authService = new AuthService(
     userRepository,
     sessionRepository,
-    app.jwt, // access token JWT
-    app.jwtRefresh // refresh token JWT (we'll register this in plugins)
+    jwtService,
+    jwtRefreshService,
   )
+
+  console.log('✅ AuthService created')
+
   const authController = new AuthController(authService)
 
   const prefix = '/auth'
@@ -65,7 +102,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       },
     },
-    authController.login
+    authController.login,
   )
 
   // POST /auth/refresh
@@ -91,7 +128,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       },
     },
-    authController.refresh
+    authController.refresh,
   )
 
   // POST /auth/logout
@@ -106,7 +143,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       },
     },
-    authController.logout
+    authController.logout,
   )
 
   // POST /auth/logout-all
@@ -123,7 +160,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       },
     },
-    authController.logoutAll
+    authController.logoutAll,
   )
 
   // GET /auth/me
@@ -152,6 +189,6 @@ export async function authRoutes(app: FastifyInstance) {
         },
       },
     },
-    authController.me
+    authController.me,
   )
 }

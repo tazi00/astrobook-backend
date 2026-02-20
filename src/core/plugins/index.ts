@@ -3,7 +3,7 @@ import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import sensible from '@fastify/sensible'
-import jwt from '@fastify/jwt'
+import fastifyJwt from '@fastify/jwt'
 import cookie from '@fastify/cookie'
 import { env } from '@/config/env'
 import { swaggerPlugin } from './swagger'
@@ -32,26 +32,28 @@ export async function registerPlugins(app: FastifyInstance) {
     }),
   })
 
-  // Cookie support (for httpOnly refresh tokens)
+  // Cookie support
   await app.register(cookie)
 
-  // JWT - Access Token (short-lived)
-  await app.register(jwt, {
+  // JWT - Access Token
+  await app.register(fastifyJwt, {
     secret: env.JWT_ACCESS_SECRET,
     sign: {
       expiresIn: env.JWT_ACCESS_EXPIRES_IN,
     },
   })
 
-  // JWT - Refresh Token (long-lived)
-  await app.register(jwt, {
-    secret: env.JWT_REFRESH_SECRET,
-    namespace: 'jwtRefresh',
-    jwtVerify: 'jwtRefreshVerify',
-    jwtSign: 'jwtRefreshSign',
-    sign: {
-      expiresIn: env.JWT_REFRESH_EXPIRES_IN,
-    },
+  // JWT - Refresh Token with custom methods
+  app.decorate('jwtRefreshSign', function (payload: any, options: any) {
+    return app.jwt.sign(
+      payload,
+      { ...options, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
+      { secret: env.JWT_REFRESH_SECRET },
+    )
+  })
+
+  app.decorate('jwtRefreshVerify', function (token: string) {
+    return app.jwt.verify(token, { secret: env.JWT_REFRESH_SECRET })
   })
 
   // Utilities
