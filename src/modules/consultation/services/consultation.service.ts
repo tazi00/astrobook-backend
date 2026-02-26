@@ -26,15 +26,9 @@ export class ConsultationService {
   // ─── Astrologer: Availability ─────────────────────────────────────────────
 
   async setAvailability(astrologerId: string, dto: CreateAvailabilityDto) {
-    // Check if a window already exists for this date; if so, replace it
-    const existing = await this.availabilityRepository.findByDate(astrologerId, dto.date)
-
-    if (existing) {
-      // Soft-delete old window then create new one (allows updating time range)
-      await this.availabilityRepository.delete(existing.id, astrologerId)
-    }
-
-    return this.availabilityRepository.create(astrologerId, dto)
+    // Upsert on (astrologer_id, date) — creates a new window or updates the
+    // existing one in place, keeping the unique constraint satisfied.
+    return this.availabilityRepository.upsert(astrologerId, dto)
   }
 
   async getMyAvailability(astrologerId: string) {

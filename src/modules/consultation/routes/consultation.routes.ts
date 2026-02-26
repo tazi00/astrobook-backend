@@ -52,7 +52,7 @@ export async function consultationRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             message: { type: 'string' },
-            service: { type: 'object' },
+            service: { type: 'object', additionalProperties: true },
           },
         },
       },
@@ -70,7 +70,7 @@ export async function consultationRoutes(app: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            services: { type: 'array', items: { type: 'object' } },
+            services: { type: 'array', items: { type: 'object', additionalProperties: true } },
           },
         },
       },
@@ -99,7 +99,7 @@ export async function consultationRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             message: { type: 'string' },
-            availability: { type: 'object' },
+            availability: { type: 'object', additionalProperties: true },
           },
         },
       },
@@ -117,7 +117,7 @@ export async function consultationRoutes(app: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            availability: { type: 'array', items: { type: 'object' } },
+            availability: { type: 'array', items: { type: 'object', additionalProperties: true } },
           },
         },
       },
@@ -158,7 +158,7 @@ export async function consultationRoutes(app: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            services: { type: 'array', items: { type: 'object' } },
+            services: { type: 'array', items: { type: 'object', additionalProperties: true } },
           },
         },
       },
@@ -214,6 +214,7 @@ export async function consultationRoutes(app: FastifyInstance) {
             message: { type: 'string' },
             appointment: {
               type: 'object',
+              additionalProperties: true,
               properties: {
                 id: { type: 'string' },
                 scheduledAt: { type: 'string' },
@@ -221,6 +222,8 @@ export async function consultationRoutes(app: FastifyInstance) {
                 durationMinutes: { type: 'integer' },
                 meetLink: { type: 'string', description: 'Google Meet link' },
                 status: { type: 'string' },
+                astrologerId: { type: 'string' },
+                userId: { type: 'string' },
               },
             },
           },
@@ -240,7 +243,7 @@ export async function consultationRoutes(app: FastifyInstance) {
         200: {
           type: 'object',
           properties: {
-            appointments: { type: 'array', items: { type: 'object' } },
+            appointments: { type: 'array', items: { type: 'object', additionalProperties: true } },
           },
         },
       },

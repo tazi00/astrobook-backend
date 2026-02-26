@@ -21,6 +21,36 @@ export class AvailabilityRepository {
     return window!
   }
 
+  /**
+   * Insert or update the window for a given (astrologer, date) pair.
+   * Uses the unique constraint as the conflict target so re-submitting the
+   * same date simply overwrites the time range and reactivates the window.
+   */
+  async upsert(astrologerId: string, dto: CreateAvailabilityDto) {
+    const [window] = await this.db
+      .insert(availabilityWindows)
+      .values({
+        astrologerId,
+        date: dto.date,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        timezone: dto.timezone,
+        isActive: true,
+      })
+      .onConflictDoUpdate({
+        target: [availabilityWindows.astrologerId, availabilityWindows.date],
+        set: {
+          startTime: sql`excluded.start_time`,
+          endTime: sql`excluded.end_time`,
+          timezone: sql`excluded.timezone`,
+          isActive: true,
+          updatedAt: sql`now()`,
+        },
+      })
+      .returning()
+    return window!
+  }
+
   async findById(id: string) {
     const [window] = await this.db
       .select()

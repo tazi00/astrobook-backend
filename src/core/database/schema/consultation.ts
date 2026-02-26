@@ -84,13 +84,13 @@ export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
   astrologerId: uuid('astrologer_id')
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'cascade' }),
   userId: uuid('user_id')
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'cascade' }),
   serviceId: uuid('service_id')
     .notNull()
-    .references(() => consultationServices.id),
+    .references(() => consultationServices.id, { onDelete: 'cascade' }),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
   endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
   durationMinutes: smallint('duration_minutes').notNull(),
