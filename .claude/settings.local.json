@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && npm run db:generate 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && npm run typecheck 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && npm run db:migrate 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && node -e \"\nrequire\\('dotenv/config'\\)\nconst { Pool } = require\\('pg'\\)\nconst pool = new Pool\\({ connectionString: process.env.DATABASE_URL }\\)\npool.query\\('SELECT * FROM drizzle_migrations ORDER BY created_at'\\).then\\(r => {\n  console.log\\(JSON.stringify\\(r.rows, null, 2\\)\\)\n  pool.end\\(\\)\n}\\).catch\\(e => {\n  console.error\\('Error:', e.message\\)\n  pool.end\\(\\)\n}\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && node -e \"\nrequire\\('dotenv/config'\\)\nconst { Pool } = require\\('pg'\\)\nconst pool = new Pool\\({ connectionString: process.env.DATABASE_URL }\\)\npool.query\\(\\\\`\n  SELECT schemaname, tablename\n  FROM pg_tables\n  WHERE tablename LIKE '%migrat%' OR tablename LIKE '%drizzle%'\n\\\\`\\).then\\(r => {\n  console.log\\('Migration-related tables:', JSON.stringify\\(r.rows, null, 2\\)\\)\n  pool.end\\(\\)\n}\\).catch\\(e => { console.error\\(e.message\\); pool.end\\(\\) }\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && node -e \"\nrequire\\('dotenv/config'\\)\nconst { Pool } = require\\('pg'\\)\nconst pool = new Pool\\({ connectionString: process.env.DATABASE_URL }\\)\npool.query\\('SELECT * FROM drizzle.__drizzle_migrations ORDER BY created_at'\\).then\\(r => {\n  console.log\\('Applied migrations:'\\)\n  r.rows.forEach\\(row => console.log\\(' -', row.hash, '|', new Date\\(Number\\(row.created_at\\)\\).toISOString\\(\\)\\)\\)\n  pool.end\\(\\)\n}\\).catch\\(e => { console.error\\(e.message\\); pool.end\\(\\) }\\)\n\" 2>&1)",
+      "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && npm test 2>&1)"
+    ]
+  }
+}

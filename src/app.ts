@@ -3,6 +3,7 @@ import { env } from '@/config/env'
 import { registerPlugins } from '@/core/plugins'
 import { authRoutes } from '@/modules/auth'
 import { userRoutes } from '@/modules/users'
+import { consultationRoutes } from '@/modules/consultation'
 
 export async function buildApp() {
   const app = Fastify({
@@ -61,6 +62,7 @@ export async function buildApp() {
   const apiPrefix = `/api/${env.API_VERSION}`
   await app.register(authRoutes, { prefix: apiPrefix })
   await app.register(userRoutes, { prefix: apiPrefix })
+  await app.register(consultationRoutes, { prefix: apiPrefix })
 
   return app
 }

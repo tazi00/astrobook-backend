@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, pgEnum, date, text } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, timestamp, boolean, pgEnum, date, text, jsonb } from 'drizzle-orm/pg-core'
 
 export const userRoleEnum = pgEnum('user_role', ['user', 'astrologer', 'admin'])
 
@@ -15,6 +15,7 @@ export const users = pgTable('users', {
   isAstrologer: boolean('is_astrologer').notNull().default(false), // Can upgrade to astrologer
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  meta: jsonb('meta').$type<any>(), // Flexible metadata — accepts any JSON value (string, array, object, etc.)
 })
 
 export type User = typeof users.$inferSelect

@@ -14,6 +14,7 @@ export const sessions = pgTable('sessions', {
   }>(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  meta: jsonb('meta').$type<any>(), // Flexible metadata — accepts any JSON value (string, array, object, etc.)
 })
 
 export type Session = typeof sessions.$inferSelect
