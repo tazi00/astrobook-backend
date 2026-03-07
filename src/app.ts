@@ -4,6 +4,7 @@ import { registerPlugins } from '@/core/plugins'
 import { authRoutes } from '@/modules/auth'
 import { userRoutes } from '@/modules/users'
 import { consultationRoutes } from '@/modules/consultation'
+import { chatRoutes } from '@/modules/chat'
 
 export async function buildApp() {
   const app = Fastify({
@@ -63,6 +64,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: apiPrefix })
   await app.register(userRoutes, { prefix: apiPrefix })
   await app.register(consultationRoutes, { prefix: apiPrefix })
+  await app.register(chatRoutes, { prefix: apiPrefix })
 
   return app
 }

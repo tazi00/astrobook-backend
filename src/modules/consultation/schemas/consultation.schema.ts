@@ -58,14 +58,30 @@ export const CreateAvailabilitySchema = z
     { message: 'Availability date cannot be in the past', path: ['date'] },
   )
 
-// ─── Booking ──────────────────────────────────────────────────────────────────
+// ─── Booking — Initiate (creates Razorpay order) ──────────────────────────────
 
-export const CreateBookingSchema = z.object({
+export const InitiateBookingSchema = z.object({
   astrologerId: z.string().uuid(),
   serviceId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
   notes: z.string().max(500).optional(),
 })
+
+// ─── Booking — Confirm (verifies payment + creates appointment) ───────────────
+
+export const ConfirmBookingSchema = z.object({
+  astrologerId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  notes: z.string().max(500).optional(),
+  razorpayOrderId: z.string().min(1),
+  razorpayPaymentId: z.string().min(1),
+  razorpaySignature: z.string().min(1),
+})
+
+// ─── Kept for internal backwards compat (slot allocation uses this shape) ─────
+
+export const CreateBookingSchema = InitiateBookingSchema
 
 // ─── Cancel Appointment ───────────────────────────────────────────────────────
 
@@ -79,4 +95,6 @@ export type UpsertServiceDto = z.infer<typeof UpsertServiceSchema>
 export type UpdateServiceDto = z.infer<typeof UpdateServiceSchema>
 export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
 export type CreateBookingDto = z.infer<typeof CreateBookingSchema>
+export type InitiateBookingDto = z.infer<typeof InitiateBookingSchema>
+export type ConfirmBookingDto = z.infer<typeof ConfirmBookingSchema>
 export type CancelAppointmentDto = z.infer<typeof CancelAppointmentSchema>

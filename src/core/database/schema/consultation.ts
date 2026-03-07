@@ -44,10 +44,9 @@ export const consultationServices = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    meta: jsonb('meta').$type<any>(), // Flexible metadata — accepts any JSON value (string, array, object, etc.)
+    meta: jsonb('meta').$type<any>(),
   },
   (t) => ({
-    // One astrologer can configure each service code only once
     uniqueAstrologerService: unique().on(t.astrologerId, t.serviceCode),
   }),
 )
@@ -69,16 +68,15 @@ export const availabilityWindows = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    meta: jsonb('meta').$type<any>(), // Flexible metadata — accepts any JSON value (string, array, object, etc.)
+    meta: jsonb('meta').$type<any>(),
   },
   (t) => ({
-    // Only one availability window per astrologer per date
     uniqueAstrologerDate: unique().on(t.astrologerId, t.date),
   }),
 )
 
 // ─── Appointments ────────────────────────────────────────────────────────────
-// Stores a confirmed booking slot with a Google Meet link.
+// Stores a confirmed booking with an Agora channel for video consultation.
 
 export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -94,13 +92,31 @@ export const appointments = pgTable('appointments', {
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
   endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
   durationMinutes: smallint('duration_minutes').notNull(),
-  meetLink: text('meet_link').notNull(),
-  googleEventId: text('google_event_id'),
+  agoraChannel: varchar('agora_channel', { length: 255 }),
+  agoraToken: text('agora_token'),
+  razorpayOrderId: varchar('razorpay_order_id', { length: 255 }),
+  razorpayPaymentId: varchar('razorpay_payment_id', { length: 255 }),
   status: appointmentStatusEnum('status').notNull().default('confirmed'),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  meta: jsonb('meta').$type<any>(), // Flexible metadata — accepts any JSON value (string, array, object, etc.)
+  meta: jsonb('meta').$type<any>(),
+})
+
+// ─── Chat Messages ───────────────────────────────────────────────────────────
+// In-app text chat linked to an appointment (DB-backed polling model).
+
+export const chatMessages = pgTable('chat_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  appointmentId: uuid('appointment_id')
+    .notNull()
+    .references(() => appointments.id, { onDelete: 'cascade' }),
+  senderId: uuid('sender_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  meta: jsonb('meta').$type<any>(),
 })
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -113,3 +129,6 @@ export type NewAvailabilityWindow = typeof availabilityWindows.$inferInsert
 
 export type Appointment = typeof appointments.$inferSelect
 export type NewAppointment = typeof appointments.$inferInsert
+
+export type ChatMessage = typeof chatMessages.$inferSelect
+export type NewChatMessage = typeof chatMessages.$inferInsert
