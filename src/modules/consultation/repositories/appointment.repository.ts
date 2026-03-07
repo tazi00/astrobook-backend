@@ -20,8 +20,6 @@ export class AppointmentRepository {
     return appointment ?? null
   }
 
-  // Find all confirmed appointments for an astrologer on a specific date window
-  // Used to detect conflicts when allocating slots
   async findConfirmedByAstrologerInRange(
     astrologerId: string,
     rangeStart: Date,
@@ -34,14 +32,12 @@ export class AppointmentRepository {
         and(
           eq(appointments.astrologerId, astrologerId),
           eq(appointments.status, 'confirmed'),
-          // Appointment starts before range ends AND ends after range starts
           lte(appointments.scheduledAt, rangeEnd),
           gte(appointments.endsAt, rangeStart),
         ),
       )
   }
 
-  // Fetch full appointment detail (with service + astrologer + user names) for a user or astrologer
   async findMineWithDetails(userId: string) {
     const astrologerUser = users
     return this.db
@@ -50,7 +46,8 @@ export class AppointmentRepository {
         scheduledAt: appointments.scheduledAt,
         endsAt: appointments.endsAt,
         durationMinutes: appointments.durationMinutes,
-        meetLink: appointments.meetLink,
+        agoraChannel: appointments.agoraChannel,
+        agoraToken: appointments.agoraToken,
         status: appointments.status,
         notes: appointments.notes,
         createdAt: appointments.createdAt,

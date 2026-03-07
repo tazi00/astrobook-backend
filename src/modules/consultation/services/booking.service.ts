@@ -1,8 +1,11 @@
+import crypto from 'node:crypto'
+import Razorpay from 'razorpay'
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/core/errors'
+import { env } from '@/config/env'
 import type { AppointmentRepository } from '../repositories/appointment.repository'
 import type { ConsultationService } from './consultation.service'
-import type { GoogleMeetService } from './google-meet.service'
-import type { CreateBookingDto } from '../schemas/consultation.schema'
+import type { AgoraService } from './agora.service'
+import type { InitiateBookingDto, ConfirmBookingDto } from '../schemas/consultation.schema'
 import type { Appointment } from '@/core/database/schema'
 
 // Slot granularity: every 15 minutes within the availability window
@@ -11,22 +14,14 @@ const SLOT_INTERVAL_MINUTES = 15
 /**
  * Converts a local date+time string to a UTC Date.
  * Handles any IANA timezone (e.g., "Asia/Kolkata", "America/New_York").
- *
- * Algorithm:
- *  1. Treat the input local time as if it were UTC (creating a "wrong" UTC)
- *  2. Find what local clock shows for that wrong UTC in the target timezone
- *  3. Compute the timezone offset (localClock - wrongUTC)
- *  4. Subtract the offset from the wrong UTC to get the real UTC
  */
 function toUtcTimestamp(dateStr: string, timeStr: string, timezone: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number) as [number, number, number]
   const [hours, minutes] = timeStr.split(':').map(Number) as [number, number]
 
-  // Step 1: Create a "wrong" UTC as if input were already UTC
   const wrongUtcMs = Date.UTC(year, month - 1, day, hours, minutes, 0)
   const wrongUtcDate = new Date(wrongUtcMs)
 
-  // Step 2: Format that wrong UTC moment in the target timezone to get local components
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',
@@ -40,7 +35,6 @@ function toUtcTimestamp(dateStr: string, timeStr: string, timezone: string): Dat
 
   const parts = Object.fromEntries(fmt.formatToParts(wrongUtcDate).map((p) => [p.type, p.value]))
 
-  // Handle midnight represented as hour "24"
   const localHour = Number(parts['hour']) === 24 ? 0 : Number(parts['hour'])
   const wrongLocalMs = Date.UTC(
     Number(parts['year']),
@@ -51,17 +45,10 @@ function toUtcTimestamp(dateStr: string, timeStr: string, timezone: string): Dat
     Number(parts['second']),
   )
 
-  // Step 3: offset = localClock - wrongUTC (this is the tz offset in ms)
   const offsetMs = wrongLocalMs - wrongUtcMs
-
-  // Step 4: real UTC = inputLocalMs - offset
   return new Date(wrongUtcMs - offsetMs)
 }
 
-/**
- * Finds all free slots within [windowStart, windowEnd) with the given duration,
- * avoiding any existing appointments.
- */
 function findFreeSlots(
   windowStart: Date,
   windowEnd: Date,
@@ -78,87 +65,137 @@ function findFreeSlots(
     const slotStart = cursor
     const slotEnd = cursor + durationMs
 
-    // Check if this slot overlaps with any existing appointment
     const conflicts = existingAppointments.some((appt) => {
       const apptStart = appt.scheduledAt.getTime()
       const apptEnd = appt.endsAt.getTime()
       return slotStart < apptEnd && slotEnd > apptStart
     })
 
-    if (!conflicts) {
-      slots.push(new Date(slotStart))
-    }
-
+    if (!conflicts) slots.push(new Date(slotStart))
     cursor += intervalMs
   }
 
   return slots
 }
 
-/** Picks a cryptographically random element from an array */
 function randomPick<T>(arr: T[]): T {
-  const idx = Math.floor(Math.random() * arr.length)
-  return arr[idx]!
+  return arr[Math.floor(Math.random() * arr.length)]!
 }
 
 export class BookingService {
+  private readonly razorpay: Razorpay
+
   constructor(
     private readonly appointmentRepository: AppointmentRepository,
     private readonly consultationService: ConsultationService,
-    private readonly googleMeetService: GoogleMeetService,
-  ) {}
+    private readonly agoraService: AgoraService,
+  ) {
+    this.razorpay = new Razorpay({
+      key_id: env.RAZORPAY_KEY_ID,
+      key_secret: env.RAZORPAY_KEY_SECRET,
+    })
+  }
 
-  async createBooking(
-    userId: string,
-    userEmail: string | null,
-    dto: CreateBookingDto,
-  ): Promise<Appointment> {
-    const { astrologerId, serviceId, date, notes } = dto
+  // ─── Step 1: Validate + create Razorpay order ──────────────────────────────
 
-    // 1. Validate service
+  async initiateBooking(dto: InitiateBookingDto) {
+    const { astrologerId, serviceId, date } = dto
+
+    // Validate service exists
     const service = await this.consultationService.getServiceForBooking(serviceId, astrologerId)
 
-    // 2. Check availability window for the requested date
+    // Validate astrologer has availability on this date
+    const availWindow = await this.consultationService.getAvailabilityForDate(astrologerId, date)
+    if (!availWindow) {
+      throw BadRequestError(`The astrologer is not available on ${date}`)
+    }
+
+    // Quick check: are there any free slots at all?
+    const windowStart = toUtcTimestamp(availWindow.date, availWindow.startTime, availWindow.timezone)
+    const windowEnd = toUtcTimestamp(availWindow.date, availWindow.endTime, availWindow.timezone)
+    const existing = await this.appointmentRepository.findConfirmedByAstrologerInRange(
+      astrologerId,
+      windowStart,
+      windowEnd,
+    )
+    const durationMs = service.durationMinutes * 60 * 1000
+    const freeSlots = findFreeSlots(windowStart, windowEnd, durationMs, existing)
+
+    if (freeSlots.length === 0) {
+      throw BadRequestError('No available time slots for this date. Please choose another date.')
+    }
+
+    // Create Razorpay order (amount in paise)
+    const priceInPaise = service.price
+      ? Math.round(Number(service.price) * 100)
+      : 0
+
+    const order = await this.razorpay.orders.create({
+      amount: priceInPaise,
+      currency: 'INR',
+      receipt: `astrobook_${crypto.randomUUID().slice(0, 16)}`,
+    })
+
+    return {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      service: {
+        title: service.title,
+        durationMinutes: service.durationMinutes,
+        price: service.price,
+      },
+    }
+  }
+
+  // ─── Step 2: Verify payment + allocate slot + generate Agora token ─────────
+
+  async confirmBooking(userId: string, dto: ConfirmBookingDto): Promise<Appointment> {
+    const { astrologerId, serviceId, date, notes, razorpayOrderId, razorpayPaymentId, razorpaySignature } = dto
+
+    // Verify Razorpay signature
+    const expectedSignature = crypto
+      .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest('hex')
+
+    if (expectedSignature !== razorpaySignature) {
+      throw BadRequestError('Payment verification failed. Invalid signature.')
+    }
+
+    // Re-validate service + availability (slot might have been taken)
+    const service = await this.consultationService.getServiceForBooking(serviceId, astrologerId)
     const availWindow = await this.consultationService.getAvailabilityForDate(astrologerId, date)
 
     if (!availWindow) {
       throw BadRequestError(`The astrologer is not available on ${date}`)
     }
 
-    // 3. Convert availability window to UTC timestamps
     const windowStart = toUtcTimestamp(availWindow.date, availWindow.startTime, availWindow.timezone)
     const windowEnd = toUtcTimestamp(availWindow.date, availWindow.endTime, availWindow.timezone)
 
-    // 4. Fetch existing confirmed appointments in this window
     const existingAppointments = await this.appointmentRepository.findConfirmedByAstrologerInRange(
       astrologerId,
       windowStart,
       windowEnd,
     )
 
-    // 5. Build list of free slots
     const durationMs = service.durationMinutes * 60 * 1000
     const freeSlots = findFreeSlots(windowStart, windowEnd, durationMs, existingAppointments)
 
     if (freeSlots.length === 0) {
-      throw BadRequestError('No available time slots for this date. Please choose another date.')
+      throw BadRequestError('All slots were filled. Please contact support for a refund.')
     }
 
-    // 6. Pick a random free slot
     const scheduledAt = randomPick(freeSlots)
     const endsAt = new Date(scheduledAt.getTime() + durationMs)
 
-    // 7. Generate Google Meet link
+    // Generate Agora channel + token
     const appointmentId = crypto.randomUUID()
-    const meetResult = await this.googleMeetService.createMeeting({
-      title: `Astrobook Consultation: ${service.title}`,
-      startTime: scheduledAt,
-      endTime: endsAt,
-      attendeeEmails: userEmail ? [userEmail] : [],
-      requestId: `astrobook-${appointmentId}`,
-    })
+    const agoraChannel = this.agoraService.generateChannelName(appointmentId)
+    const agoraToken = this.agoraService.generateToken(agoraChannel, endsAt)
 
-    // 8. Persist appointment
+    // Persist appointment
     const appointment = await this.appointmentRepository.create({
       id: appointmentId,
       astrologerId,
@@ -167,8 +204,10 @@ export class BookingService {
       scheduledAt,
       endsAt,
       durationMinutes: service.durationMinutes,
-      meetLink: meetResult.meetLink,
-      googleEventId: meetResult.eventId,
+      agoraChannel,
+      agoraToken,
+      razorpayOrderId,
+      razorpayPaymentId,
       status: 'confirmed',
       notes: notes ?? null,
     })
@@ -176,21 +215,43 @@ export class BookingService {
     return appointment
   }
 
+  // ─── Get a fresh Agora token for an existing appointment ───────────────────
+
+  async getJoinToken(appointmentId: string, requesterId: string) {
+    const appointment = await this.appointmentRepository.findById(appointmentId)
+
+    if (!appointment) throw NotFoundError('Appointment not found')
+
+    if (appointment.userId !== requesterId && appointment.astrologerId !== requesterId) {
+      throw ForbiddenError('You are not a participant of this appointment')
+    }
+
+    if (appointment.status !== 'confirmed') {
+      throw BadRequestError('Appointment is not active')
+    }
+
+    if (!appointment.agoraChannel) {
+      throw BadRequestError('Agora channel not set for this appointment')
+    }
+
+    const freshToken = this.agoraService.refreshToken(appointment.agoraChannel)
+
+    return {
+      appId: env.AGORA_APP_ID,
+      channel: appointment.agoraChannel,
+      token: freshToken,
+    }
+  }
+
   async getMyAppointments(userId: string) {
     return this.appointmentRepository.findMineWithDetails(userId)
   }
 
-  async cancelAppointment(
-    appointmentId: string,
-    requesterId: string,
-  ): Promise<Appointment> {
+  async cancelAppointment(appointmentId: string, requesterId: string): Promise<Appointment> {
     const appointment = await this.appointmentRepository.findById(appointmentId)
 
-    if (!appointment) {
-      throw NotFoundError('Appointment not found')
-    }
+    if (!appointment) throw NotFoundError('Appointment not found')
 
-    // Only the user who booked or the astrologer can cancel
     if (appointment.userId !== requesterId && appointment.astrologerId !== requesterId) {
       throw ForbiddenError('You are not authorized to cancel this appointment')
     }
@@ -201,16 +262,6 @@ export class BookingService {
 
     if (appointment.status === 'completed') {
       throw BadRequestError('Cannot cancel a completed appointment')
-    }
-
-    // Cancel the Google Calendar event (best-effort)
-    if (appointment.googleEventId) {
-      try {
-        await this.googleMeetService.cancelEvent(appointment.googleEventId)
-      } catch {
-        // Non-fatal: log and continue even if Google event deletion fails
-        console.warn(`Failed to delete Google event ${appointment.googleEventId}`)
-      }
     }
 
     const updated = await this.appointmentRepository.updateStatus(appointmentId, 'cancelled')
