@@ -1,268 +1,409 @@
 import type { FastifyInstance } from 'fastify'
 import { getDb } from '@/core/database/client'
 import { authenticate, requireRole } from '@/modules/auth'
+
 import { ServiceRepository } from '../repositories/service.repository'
 import { AvailabilityRepository } from '../repositories/availability.repository'
 import { AppointmentRepository } from '../repositories/appointment.repository'
+
 import { ConsultationService } from '../services/consultation.service'
 import { BookingService } from '../services/booking.service'
-import { GoogleMeetService } from '../services/google-meet.service'
-import { AstrologerController } from '../controllers/astrologer.controller'
+
 import { BookingController } from '../controllers/booking.controller'
+import { PaymentRepository } from '@/modules/payment/repositories/payment.repositary'
+import { ServiceRequestRepository } from '../repositories/service-request.service'
+import { PaymentService } from '@/modules/payment/service/payment.service'
+import { ServiceRequestService } from '../services/service-request.service'
+import { PaymentController } from '@/modules/payment/controllers/payment.controller'
+import { ServiceRequestController } from '../controllers/service-request.controller'
+import { AstrologerConsultationController } from '../controllers/astrologer-consultation.controller'
+import { CancelAppointmentSchema } from '../schemas/consultation.schema'
 
 export async function consultationRoutes(app: FastifyInstance) {
   const db = getDb()
 
-  // ─── Dependency injection ────────────────────────────────────────────────
+  // ─── Dependency Injection ─────────────────────────────────────────────────
   const serviceRepo = new ServiceRepository(db)
   const availabilityRepo = new AvailabilityRepository(db)
   const appointmentRepo = new AppointmentRepository(db)
-  const googleMeetService = new GoogleMeetService()
+  // const paymentRepo = new PaymentRepository(db)
+  const serviceRequestRepo = new ServiceRequestRepository(db)
+
   const consultationService = new ConsultationService(serviceRepo, availabilityRepo)
-  const bookingService = new BookingService(appointmentRepo, consultationService, googleMeetService)
-  const astrologerController = new AstrologerController(consultationService)
-  const bookingController = new BookingController(bookingService, consultationService)
+  const bookingService = new BookingService(appointmentRepo, consultationService)
+  // const paymentService = new PaymentService(paymentRepo, appointmentRepo)
+  const serviceRequestService = new ServiceRequestService(serviceRequestRepo, appointmentRepo)
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ASTROLOGER ROUTES (role: astrologer)
-  // ─────────────────────────────────────────────────────────────────────────
+  const astrologerConsultationController = new AstrologerConsultationController(
+    consultationService,
+    bookingService,
+  )
+  const bookingController = new BookingController(bookingService)
+  // const paymentController = new PaymentController(paymentService)
+  const serviceRequestController = new ServiceRequestController(serviceRequestService)
 
-  // POST /consultation/services — create or update a service offering
-  app.post('/consultation/services', {
-    preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
-    schema: {
-      tags: ['Consultation – Astrologer'],
-      summary: 'Create or update a consultation service (101–104)',
-      security: [{ bearerAuth: [] }],
-      body: {
-        type: 'object',
-        required: ['serviceCode', 'title', 'shortDescription', 'coverImage', 'about', 'durationMinutes'],
-        properties: {
-          serviceCode: { type: 'integer', enum: [101, 102, 103, 104], description: 'Service category code' },
-          title: { type: 'string', minLength: 3, maxLength: 255 },
-          shortDescription: { type: 'string', minLength: 10, maxLength: 500 },
-          coverImage: { type: 'string', description: 'URL of the cover image' },
-          about: { type: 'string', minLength: 20 },
-          durationMinutes: { type: 'integer', minimum: 15, maximum: 180, description: 'Duration in minutes' },
-          price: { type: 'number', minimum: 0, description: 'Consultation fee (optional)' },
-        },
-      },
-      response: {
-        200: {
+  // ═════════════════════════════════════════════════════════════════════════
+  // ASTROLOGER PANEL ROUTES
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // POST /consultation/services
+  app.post(
+    '/consultation/services',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Create or update a consultation service (101–104)',
+        security: [{ bearerAuth: [] }],
+        body: {
           type: 'object',
+          required: [
+            'serviceCode',
+            'title',
+            'shortDescription',
+            'coverImage',
+            'about',
+            'durationMinutes',
+          ],
           properties: {
-            message: { type: 'string' },
-            service: { type: 'object', additionalProperties: true },
+            serviceCode: { type: 'integer', enum: [101, 102, 103, 104] },
+            title: { type: 'string', minLength: 3, maxLength: 255 },
+            shortDescription: { type: 'string', minLength: 10, maxLength: 500 },
+            coverImage: { type: 'string' },
+            about: { type: 'string', minLength: 20 },
+            durationMinutes: { type: 'integer', minimum: 15, maximum: 180 },
+            price: { type: 'number', minimum: 0 },
           },
         },
       },
     },
-  }, astrologerController.upsertService)
+    astrologerConsultationController.upsertService,
+  )
 
-  // GET /consultation/services/mine — list own services
-  app.get('/consultation/services/mine', {
-    preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
-    schema: {
-      tags: ['Consultation – Astrologer'],
-      summary: 'Get all my consultation services',
-      security: [{ bearerAuth: [] }],
-      response: {
-        200: {
+  // GET /consultation/services/mine
+  app.get(
+    '/consultation/services/mine',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Get my consultation services',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    astrologerConsultationController.getMyServices,
+  )
+
+  // POST /consultation/availability
+  app.post(
+    '/consultation/availability',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Set availability window for a date',
+        security: [{ bearerAuth: [] }],
+        body: {
           type: 'object',
+          required: ['date', 'startTime', 'endTime'],
           properties: {
-            services: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            date: { type: 'string' },
+            startTime: { type: 'string' },
+            endTime: { type: 'string' },
+            timezone: { type: 'string', default: 'Asia/Kolkata' },
           },
         },
       },
     },
-  }, astrologerController.getMyServices)
+    astrologerConsultationController.setAvailability,
+  )
 
-  // POST /consultation/availability — set a date+time window
-  app.post('/consultation/availability', {
-    preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
-    schema: {
-      tags: ['Consultation – Astrologer'],
-      summary: 'Set availability window for a specific date',
-      security: [{ bearerAuth: [] }],
-      body: {
-        type: 'object',
-        required: ['date', 'startTime', 'endTime'],
-        properties: {
-          date: { type: 'string', description: 'Date in YYYY-MM-DD format' },
-          startTime: { type: 'string', description: 'Start time in HH:MM (24-hour)' },
-          endTime: { type: 'string', description: 'End time in HH:MM (24-hour)' },
-          timezone: { type: 'string', default: 'Asia/Kolkata', description: 'IANA timezone name' },
+  // GET /consultation/availability/mine
+  app.get(
+    '/consultation/availability/mine',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Get my upcoming availability windows',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    astrologerConsultationController.getMyAvailability,
+  )
+
+  // DELETE /consultation/availability/:id
+  app.delete(
+    '/consultation/availability/:id',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Delete an availability window',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
         },
       },
-      response: {
-        201: {
+    },
+    astrologerConsultationController.deleteAvailability,
+  )
+
+  // GET /consultation/schedule — astrologer ka calendar view
+  app.get(
+    '/consultation/schedule',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Astrologer'],
+        summary: 'Get my schedule with booked appointments',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    astrologerConsultationController.getSchedule,
+  )
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // USER BOOKING ROUTES
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // POST /consultation/appointments/initiate — pending appointment banao
+  app.post(
+    '/consultation/appointments/initiate',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – User'],
+        summary: 'Initiate a booking (creates pending appointment, no payment yet)',
+        security: [{ bearerAuth: [] }],
+        body: {
           type: 'object',
+          required: ['astrologerId', 'serviceId', 'scheduledAt'],
           properties: {
-            message: { type: 'string' },
-            availability: { type: 'object', additionalProperties: true },
+            astrologerId: { type: 'string', format: 'uuid' },
+            serviceId: { type: 'string', format: 'uuid' },
+            scheduledAt: { type: 'string', description: 'ISO datetime' },
+            notes: { type: 'string', maxLength: 500 },
           },
         },
-      },
-    },
-  }, astrologerController.setAvailability)
-
-  // GET /consultation/availability/mine — view own upcoming availability
-  app.get('/consultation/availability/mine', {
-    preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
-    schema: {
-      tags: ['Consultation – Astrologer'],
-      summary: 'Get my upcoming availability windows',
-      security: [{ bearerAuth: [] }],
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            availability: { type: 'array', items: { type: 'object', additionalProperties: true } },
-          },
-        },
-      },
-    },
-  }, astrologerController.getMyAvailability)
-
-  // DELETE /consultation/availability/:id — remove an availability window
-  app.delete('/consultation/availability/:id', {
-    preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
-    schema: {
-      tags: ['Consultation – Astrologer'],
-      summary: 'Delete an availability window',
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: { id: { type: 'string', format: 'uuid' } },
-      },
-      response: { 204: { type: 'null' } },
-    },
-  }, astrologerController.deleteAvailability)
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // PUBLIC / USER ROUTES
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // GET /consultation/astrologers/:astrologerId/services — browse services
-  app.get('/consultation/astrologers/:astrologerId/services', {
-    schema: {
-      tags: ['Consultation – User'],
-      summary: "Browse an astrologer's consultation services",
-      params: {
-        type: 'object',
-        required: ['astrologerId'],
-        properties: { astrologerId: { type: 'string', format: 'uuid' } },
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            services: { type: 'array', items: { type: 'object', additionalProperties: true } },
-          },
-        },
-      },
-    },
-  }, bookingController.getAstrologerServices)
-
-  // GET /consultation/astrologers/:astrologerId/available-dates — calendar data
-  app.get('/consultation/astrologers/:astrologerId/available-dates', {
-    schema: {
-      tags: ['Consultation – User'],
-      summary: 'Get dates where the astrologer has availability (for calendar highlight)',
-      params: {
-        type: 'object',
-        required: ['astrologerId'],
-        properties: { astrologerId: { type: 'string', format: 'uuid' } },
-      },
-      response: {
-        200: {
-          type: 'object',
-          properties: {
-            availableDates: {
-              type: 'array',
-              items: { type: 'string', description: 'YYYY-MM-DD' },
-              description: 'Highlighted dates on the calendar',
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              message: { type: 'string' },
+              appointment: { type: 'object', additionalProperties: true },
             },
           },
         },
       },
     },
-  }, bookingController.getAvailableDates)
+    bookingController.initiateBooking,
+  )
 
-  // POST /consultation/appointments — book a slot (triggers slot allocation + Meet link)
-  app.post('/consultation/appointments', {
-    preHandler: [authenticate],
-    schema: {
-      tags: ['Consultation – User'],
-      summary: 'Book a consultation slot (auto-allocates a random free slot + generates Meet link)',
-      security: [{ bearerAuth: [] }],
-      body: {
-        type: 'object',
-        required: ['astrologerId', 'serviceId', 'date'],
-        properties: {
-          astrologerId: { type: 'string', format: 'uuid' },
-          serviceId: { type: 'string', format: 'uuid', description: 'ID of the consultation service' },
-          date: { type: 'string', description: 'Requested date in YYYY-MM-DD' },
-          notes: { type: 'string', maxLength: 500, description: 'Optional notes from the user' },
-        },
-      },
-      response: {
-        201: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            appointment: {
-              type: 'object',
-              additionalProperties: true,
-              properties: {
-                id: { type: 'string' },
-                scheduledAt: { type: 'string' },
-                endsAt: { type: 'string' },
-                durationMinutes: { type: 'integer' },
-                meetLink: { type: 'string', description: 'Google Meet link' },
-                status: { type: 'string' },
-                astrologerId: { type: 'string' },
-                userId: { type: 'string' },
-              },
+  // GET /consultation/appointments/mine — grouped: upcoming/ongoing/completed
+  app.get(
+    '/consultation/appointments/mine',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – User'],
+        summary: 'Get my appointments grouped by status',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              upcoming: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              ongoing: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              completed: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              cancelled: { type: 'array', items: { type: 'object', additionalProperties: true } },
             },
           },
         },
       },
     },
-  }, bookingController.createBooking)
+    bookingController.getMyAppointments,
+  )
 
-  // GET /consultation/appointments/mine — view own appointments (user or astrologer)
-  app.get('/consultation/appointments/mine', {
-    preHandler: [authenticate],
-    schema: {
-      tags: ['Consultation – User'],
-      summary: 'Get my appointments (works for both users and astrologers)',
-      security: [{ bearerAuth: [] }],
-      response: {
-        200: {
+  // GET /consultation/appointments/:id — single appointment detail
+  app.get(
+    '/consultation/appointments/:id',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – User'],
+        summary: 'Get single appointment detail',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    bookingController.getAppointmentById,
+  )
+
+  // PATCH /consultation/appointments/:id/cancel
+  app.patch(
+    '/consultation/appointments/:id/cancel',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – User'],
+        summary: 'Cancel an appointment',
+        security: [{ bearerAuth: [] }],
+        body: {
           type: 'object',
           properties: {
-            appointments: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            reason: { type: 'string', maxLength: 500 },
+          },
+        },
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+      },
+    },
+    bookingController.cancelAppointment,
+  )
+
+  // // ═════════════════════════════════════════════════════════════════════════
+  // // PAYMENT ROUTES
+  // // ═════════════════════════════════════════════════════════════════════════
+
+  // // POST /consultation/payments/create-order — Razorpay order banao
+  // app.post(
+  //   '/consultation/payments/create-order',
+  //   {
+  //     preHandler: [authenticate],
+  //     schema: {
+  //       tags: ['Consultation – Payment'],
+  //       summary: 'Create Razorpay order for an appointment',
+  //       security: [{ bearerAuth: [] }],
+  //       body: {
+  //         type: 'object',
+  //         required: ['appointmentId'],
+  //         properties: {
+  //           appointmentId: { type: 'string', format: 'uuid' },
+  //         },
+  //       },
+  //       response: {
+  //         201: {
+  //           type: 'object',
+  //           properties: {
+  //             orderId: { type: 'string' },
+  //             amount: { type: 'number' },
+  //             currency: { type: 'string' },
+  //             appointmentId: { type: 'string' },
+  //           },
+  //         },
+  //       },
+  //     },
+  //   },
+  //   paymentController.createOrder,
+  // )
+
+  // // POST /consultation/payments/verify — payment verify karo
+  // app.post(
+  //   '/consultation/payments/verify',
+  //   {
+  //     preHandler: [authenticate],
+  //     schema: {
+  //       tags: ['Consultation – Payment'],
+  //       summary: 'Verify Razorpay payment → confirm appointment + generate Agora token',
+  //       security: [{ bearerAuth: [] }],
+  //       body: {
+  //         type: 'object',
+  //         required: ['appointmentId', 'razorpayOrderId', 'razorpayPaymentId', 'razorpaySignature'],
+  //         properties: {
+  //           appointmentId: { type: 'string', format: 'uuid' },
+  //           razorpayOrderId: { type: 'string' },
+  //           razorpayPaymentId: { type: 'string' },
+  //           razorpaySignature: { type: 'string' },
+  //         },
+  //       },
+  //       response: {
+  //         200: {
+  //           type: 'object',
+  //           properties: {
+  //             message: { type: 'string' },
+  //             appointment: { type: 'object', additionalProperties: true },
+  //           },
+  //         },
+  //       },
+  //     },
+  //   },
+  //   paymentController.verifyPayment,
+  // )
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // SERVICE REQUEST ROUTES (mid-session upsell)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  // POST /consultation/service-requests — astrologer upsell bheje
+  app.post(
+    '/consultation/service-requests',
+    {
+      preHandler: [authenticate, requireRole(['astrologer', 'admin'])],
+      schema: {
+        tags: ['Consultation – Service Request'],
+        summary: 'Astrologer sends a service request to user during session',
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['parentAppointmentId', 'serviceId', 'proposedSlot'],
+          properties: {
+            parentAppointmentId: { type: 'string', format: 'uuid' },
+            serviceId: { type: 'string', format: 'uuid' },
+            proposedSlot: { type: 'string', description: 'ISO datetime' },
           },
         },
       },
     },
-  }, bookingController.getMyAppointments)
+    serviceRequestController.createRequest,
+  )
 
-  // PATCH /consultation/appointments/:id/cancel — cancel an appointment
-  app.patch('/consultation/appointments/:id/cancel', {
-    preHandler: [authenticate],
-    schema: {
-      tags: ['Consultation – User'],
-      summary: 'Cancel an appointment',
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: { id: { type: 'string', format: 'uuid' } },
+  // PATCH /consultation/service-requests/:id — user accept/reject kare
+  app.patch(
+    '/consultation/service-requests/:id',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – Service Request'],
+        summary: 'User accepts or rejects a service request',
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          required: ['status'],
+          properties: {
+            status: { type: 'string', enum: ['accepted', 'rejected'] },
+          },
+        },
       },
-      response: { 204: { type: 'null' } },
     },
-  }, bookingController.cancelAppointment)
+    serviceRequestController.respondToRequest,
+  )
+
+  // GET /consultation/service-requests/mine — user ke pending requests
+  app.get(
+    '/consultation/service-requests/mine',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Consultation – Service Request'],
+        summary: 'Get my pending service requests',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    serviceRequestController.getMyRequests,
+  )
 }

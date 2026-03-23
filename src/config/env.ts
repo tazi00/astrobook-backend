@@ -29,10 +29,13 @@ const envSchema = z.object({
   // Session
   MAX_SESSIONS_PER_USER: z.coerce.number().default(3),
 
-  // Google Calendar / Meet
-  GOOGLE_CLIENT_EMAIL: z.string().email('GOOGLE_CLIENT_EMAIL must be a valid service account email'),
-  GOOGLE_PRIVATE_KEY: z.string().min(1, 'GOOGLE_PRIVATE_KEY is required'),
-  GOOGLE_CALENDAR_ID: z.string().default('primary'),
+  // Agora
+  AGORA_APP_ID: z.string(),
+  AGORA_APP_CERTIFICATE: z.string(),
+
+  //Razorpay
+  RAZORPAY_KEY_ID: z.string(),
+  RAZORPAY_KEY_SECRET: z.string(),
 })
 
 const parsed = envSchema.safeParse(process.env)

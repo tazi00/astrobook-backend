@@ -63,7 +63,10 @@ export const CreateAvailabilitySchema = z
 export const CreateBookingSchema = z.object({
   astrologerId: z.string().uuid(),
   serviceId: z.string().uuid(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  scheduledAt: z.string().datetime({
+    message: 'Must be a valid ISO datetime',
+    offset: true,
+  }),
   notes: z.string().max(500).optional(),
 })
 
@@ -73,6 +76,51 @@ export const CancelAppointmentSchema = z.object({
   reason: z.string().max(500).optional(),
 })
 
+// ─── Payment ──────────────────────────────────────────────────────────────────
+
+export const CreatePaymentOrderSchema = z.object({
+  appointmentId: z.string().uuid(),
+})
+
+export const VerifyPaymentSchema = z.object({
+  appointmentId: z.string().uuid(),
+  razorpayOrderId: z.string(),
+  razorpayPaymentId: z.string(),
+  razorpaySignature: z.string(),
+})
+
+// ─── Service Request (Mid-session upsell) ────────────────────────────────────
+
+export const CreateServiceRequestSchema = z.object({
+  parentAppointmentId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  proposedSlot: z.string().datetime({ message: 'Must be a valid ISO datetime' }),
+})
+
+export const RespondServiceRequestSchema = z.object({
+  status: z.enum(['accepted', 'rejected']),
+})
+
+// ─── Enums (for reference) ────────────────────────────────────────────────────
+
+export const APPOINTMENT_STATUS = [
+  'pending', // payment nahi hua
+  'confirmed', // payment ho gaya, time nahi aaya
+  'ongoing', // session chal raha hai
+  'completed', // session khatam
+  'cancelled', // cancel hua
+] as const
+
+export const BUNDLE_STATUS = [
+  'in_progress', // koi child session ongoing hai
+  'paused', // saare current complete, future child pending
+  'completed', // sab khatam
+] as const
+
+export const SERVICE_REQUEST_STATUS = ['pending', 'accepted', 'rejected', 'expired'] as const
+
+export const PAYMENT_STATUS = ['pending', 'success', 'failed'] as const
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type UpsertServiceDto = z.infer<typeof UpsertServiceSchema>
@@ -80,3 +128,12 @@ export type UpdateServiceDto = z.infer<typeof UpdateServiceSchema>
 export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
 export type CreateBookingDto = z.infer<typeof CreateBookingSchema>
 export type CancelAppointmentDto = z.infer<typeof CancelAppointmentSchema>
+export type CreatePaymentOrderDto = z.infer<typeof CreatePaymentOrderSchema>
+export type VerifyPaymentDto = z.infer<typeof VerifyPaymentSchema>
+export type CreateServiceRequestDto = z.infer<typeof CreateServiceRequestSchema>
+export type RespondServiceRequestDto = z.infer<typeof RespondServiceRequestSchema>
+
+export type AppointmentStatus = (typeof APPOINTMENT_STATUS)[number]
+export type BundleStatus = (typeof BUNDLE_STATUS)[number]
+export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUS)[number]
+export type PaymentStatus = (typeof PAYMENT_STATUS)[number]

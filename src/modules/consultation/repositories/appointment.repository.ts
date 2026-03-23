@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, or, sql } from 'drizzle-orm'
+import { eq, and, gte, lte, or, sql, inArray, lt, gt } from 'drizzle-orm'
 import type { Database } from '@/core/database/client'
 import { appointments, consultationServices, users } from '@/core/database/schema'
 import type { NewAppointment } from '@/core/database/schema'
@@ -20,38 +20,33 @@ export class AppointmentRepository {
     return appointment ?? null
   }
 
-  // Find all confirmed appointments for an astrologer on a specific date window
-  // Used to detect conflicts when allocating slots
-  async findConfirmedByAstrologerInRange(
-    astrologerId: string,
-    rangeStart: Date,
-    rangeEnd: Date,
-  ) {
+  // Conflict check — confirmed + ongoing appointments in a time range
+  async findConfirmedByAstrologerInRange(astrologerId: string, rangeStart: Date, rangeEnd: Date) {
     return this.db
       .select()
       .from(appointments)
       .where(
         and(
           eq(appointments.astrologerId, astrologerId),
-          eq(appointments.status, 'confirmed'),
-          // Appointment starts before range ends AND ends after range starts
-          lte(appointments.scheduledAt, rangeEnd),
-          gte(appointments.endsAt, rangeStart),
+          inArray(appointments.status, ['pending', 'confirmed', 'ongoing']),
+          lt(appointments.scheduledAt, rangeEnd), // ← rangeEnd
+          gt(appointments.endsAt, rangeStart), // ← rangeStart
         ),
       )
   }
-
-  // Fetch full appointment detail (with service + astrologer + user names) for a user or astrologer
-  async findMineWithDetails(userId: string) {
-    const astrologerUser = users
-    return this.db
+  // Full detail query — with service + astrologer info
+  private baseDetailQuery(db: Database) {
+    return db
       .select({
         id: appointments.id,
         scheduledAt: appointments.scheduledAt,
         endsAt: appointments.endsAt,
         durationMinutes: appointments.durationMinutes,
-        meetLink: appointments.meetLink,
         status: appointments.status,
+        bundleStatus: appointments.bundleStatus,
+        parentId: appointments.parentId,
+        agoraChannel: appointments.agoraChannel,
+        agoraToken: appointments.agoraToken,
         notes: appointments.notes,
         createdAt: appointments.createdAt,
         service: {
@@ -62,23 +57,70 @@ export class AppointmentRepository {
           durationMinutes: consultationServices.durationMinutes,
           price: consultationServices.price,
         },
-        astrologerName: astrologerUser.name,
+        astrologerName: users.name,
         astrologerId: appointments.astrologerId,
         userId: appointments.userId,
       })
       .from(appointments)
       .innerJoin(consultationServices, eq(appointments.serviceId, consultationServices.id))
-      .innerJoin(astrologerUser, eq(appointments.astrologerId, astrologerUser.id))
-      .where(
-        or(eq(appointments.userId, userId), eq(appointments.astrologerId, userId)),
-      )
-      .orderBy(sql`${appointments.scheduledAt} DESC`)
+      .innerJoin(users, eq(appointments.astrologerId, users.id))
   }
 
-  async updateStatus(id: string, status: 'confirmed' | 'cancelled' | 'completed') {
+  // Grouped: upcoming / ongoing / completed / cancelled
+  async findMineGrouped(userId: string) {
+    const rows = await this.baseDetailQuery(this.db)
+      .where(or(eq(appointments.userId, userId), eq(appointments.astrologerId, userId)))
+      .orderBy(sql`${appointments.scheduledAt} ASC`)
+
+    return {
+      upcoming: rows.filter((r) => r.status === 'confirmed' || r.status === 'pending'),
+      ongoing: rows.filter((r) => r.status === 'ongoing'),
+      completed: rows.filter((r) => r.status === 'completed'),
+      cancelled: rows.filter((r) => r.status === 'cancelled'),
+    }
+  }
+
+  // Single appointment with full detail
+  async findByIdWithDetails(id: string) {
+    const [row] = await this.baseDetailQuery(this.db).where(eq(appointments.id, id)).limit(1)
+    return row ?? null
+  }
+
+  // Child sessions of a parent appointment
+  async findChildren(parentId: string) {
+    return this.baseDetailQuery(this.db)
+      .where(eq(appointments.parentId, parentId))
+      .orderBy(sql`${appointments.scheduledAt} ASC`)
+  }
+
+  // Astrologer schedule — all confirmed/ongoing for a specific date
+  async findByAstrologerAndDate(astrologerId: string, date: string) {
+    const dayStart = new Date(`${date}T00:00:00.000Z`)
+    const dayEnd = new Date(`${date}T23:59:59.999Z`)
+    return this.baseDetailQuery(this.db)
+      .where(
+        and(
+          eq(appointments.astrologerId, astrologerId),
+          inArray(appointments.status, ['confirmed', 'ongoing']),
+          gte(appointments.scheduledAt, dayStart),
+          lte(appointments.scheduledAt, dayEnd),
+        ),
+      )
+      .orderBy(sql`${appointments.scheduledAt} ASC`)
+  }
+
+  async update(
+    id: string,
+    data: Partial<{
+      status: 'pending' | 'confirmed' | 'ongoing' | 'completed' | 'cancelled'
+      bundleStatus: 'in_progress' | 'paused' | 'completed'
+      agoraChannel: string
+      agoraToken: string
+    }>,
+  ) {
     const [appointment] = await this.db
       .update(appointments)
-      .set({ status, updatedAt: sql`now()` })
+      .set({ ...data, updatedAt: sql`now()` })
       .where(eq(appointments.id, id))
       .returning()
     return appointment ?? null

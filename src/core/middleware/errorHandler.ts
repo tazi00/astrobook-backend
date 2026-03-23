@@ -8,6 +8,7 @@ export async function errorHandlerPlugin(app: FastifyInstance) {
 
     // Zod validation errors
     if (error instanceof ZodError) {
+      app.log.error({ details: error.flatten().fieldErrors }, '❌ ZOD VALIDATION ERROR') // ← add karo
       return reply.status(422).send({
         error: 'VALIDATION_ERROR',
         message: 'Validation failed',

@@ -4,6 +4,8 @@ import { registerPlugins } from '@/core/plugins'
 import { authRoutes } from '@/modules/auth'
 import { userRoutes } from '@/modules/users'
 import { consultationRoutes } from '@/modules/consultation'
+import { astrologerRoutes } from './modules/astrologers/routes/astrologer.routes'
+import { paymentRoutes } from './modules/payment/routes/payment.routes'
 
 export async function buildApp() {
   const app = Fastify({
@@ -55,7 +57,7 @@ export async function buildApp() {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
       })
-    }
+    },
   )
 
   // API routes
@@ -63,6 +65,8 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: apiPrefix })
   await app.register(userRoutes, { prefix: apiPrefix })
   await app.register(consultationRoutes, { prefix: apiPrefix })
+  await app.register(paymentRoutes, { prefix: apiPrefix })
+  await app.register(astrologerRoutes, { prefix: apiPrefix })
 
   return app
 }

@@ -95,6 +95,7 @@ export async function authRoutes(app: FastifyInstance) {
                   name: { type: 'string' },
                   role: { type: 'string', enum: ['user', 'astrologer', 'admin'] },
                   isOnboarded: { type: 'boolean' },
+                  
                 },
               },
             },
