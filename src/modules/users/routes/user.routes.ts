@@ -67,7 +67,7 @@ export async function userRoutes(app: FastifyInstance) {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              firebaseUid: { type: 'string' },
+              supabaseId: { type: 'string' },
               email: { type: ['string', 'null'] },
               phone: { type: ['string', 'null'] },
               name: { type: 'string' },

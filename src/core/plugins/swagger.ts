@@ -8,7 +8,7 @@ export async function swaggerPlugin(app: FastifyInstance) {
     openapi: {
       info: {
         title: 'Astrobook API',
-        description: 'Firebase Auth + JWT Session Management',
+        description: 'Supabase Auth + JWT Session Management',
         version: '1.0.0',
       },
       servers: [

@@ -11,11 +11,11 @@ export class UserRepository {
     return user ?? null
   }
 
-  async findByFirebaseUid(firebaseUid: string) {
+  async findBySupabaseId(supabaseId: string) {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.firebaseUid, firebaseUid))
+      .where(eq(users.supabaseId, supabaseId))
       .limit(1)
     return user ?? null
   }

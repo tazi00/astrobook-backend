@@ -4,7 +4,7 @@ export const userRoleEnum = pgEnum('user_role', ['user', 'astrologer', 'admin'])
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  firebaseUid: varchar('firebase_uid', { length: 128 }).notNull().unique(),
+  supabaseId: varchar('supabase_id', { length: 128 }).notNull().unique(),
   email: varchar('email', { length: 255 }).unique(),
   phone: varchar('phone', { length: 20 }).unique(),
   name: varchar('name', { length: 255 }).notNull(),

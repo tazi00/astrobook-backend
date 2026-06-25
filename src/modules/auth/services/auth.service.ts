@@ -1,8 +1,8 @@
-import { verifyFirebaseToken } from '@/core/utils/firebase'
+import { verifySupabaseToken } from '@/core/utils/supabase'
 import { UnauthorizedError, InvalidTokenError, TokenExpiredError } from '@/core/errors'
 import type { UserRepository } from '../repositories/user.repository'
 import type { SessionRepository } from '../repositories/session.repository'
-import type { FirebaseLoginDto, AuthResponse } from '../schemas/auth.schema'
+import type { SupabaseLoginDto, AuthResponse } from '../schemas/auth.schema'
 import { env } from '@/config/env'
 import crypto from 'crypto'
 
@@ -17,35 +17,33 @@ export class AuthService {
     private readonly sessionRepository: SessionRepository,
     private readonly jwtService: JWTService,
     private readonly jwtRefreshService: JWTService,
-  ) {
-    console.log('🚀 AuthService constructor called!')
-    console.log('🔑 jwtService exists?', !!this.jwtService)
-    console.log('🔑 jwtService.sign exists?', !!(this.jwtService && this.jwtService.sign))
-    console.log('🔑 jwtRefreshService exists?', !!this.jwtRefreshService)
-  }
+  ) {}
 
-  async loginWithFirebase(dto: FirebaseLoginDto, ip?: string): Promise<AuthResponse> {
-    console.log('🔐 loginWithFirebase called')
-    console.log('🔑 About to call jwtService.sign')
-    console.log('🔑 this.jwtService is:', this.jwtService)
-
-    let decodedToken: any
+  async loginWithSupabase(dto: SupabaseLoginDto, ip?: string): Promise<AuthResponse> {
+    let supabaseUser: any
     try {
-      decodedToken = await verifyFirebaseToken(dto.idToken)
+      supabaseUser = await verifySupabaseToken(dto.accessToken)
     } catch (error) {
-      throw InvalidTokenError('Invalid Firebase ID token')
+      throw InvalidTokenError('Invalid Supabase access token')
     }
 
-    const { uid: firebaseUid, email, phone_number, name } = decodedToken
+    const supabaseId = supabaseUser.id as string
+    const email = supabaseUser.email ?? null
+    const phone = supabaseUser.phone ?? null
+    const name: string =
+      supabaseUser.user_metadata?.full_name ??
+      supabaseUser.user_metadata?.name ??
+      email?.split('@')[0] ??
+      'User'
 
-    let user = await this.userRepository.findByFirebaseUid(firebaseUid)
+    let user = await this.userRepository.findBySupabaseId(supabaseId)
 
     if (!user) {
       user = await this.userRepository.create({
-        firebaseUid,
+        supabaseId,
         email: email ?? null,
-        phone: phone_number ?? null,
-        name: name ?? email?.split('@')[0] ?? 'User',
+        phone: phone ?? null,
+        name,
         role: 'user',
         isOnboarded: false,
       })
@@ -86,7 +84,7 @@ export class AuthService {
       refreshToken,
       user: {
         id: user.id,
-        firebaseUid: user.firebaseUid,
+        supabaseId: user.supabaseId,
         email: user.email,
         phone: user.phone,
         name: user.name,

@@ -22,7 +22,7 @@ export const UpdateProfileSchema = z.object({
 
 export const UserResponseSchema = z.object({
   id: z.string().uuid(),
-  firebaseUid: z.string(),
+  supabaseId: z.string(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
   name: z.string(),

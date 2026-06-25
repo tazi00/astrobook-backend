@@ -1,21 +1,20 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { AuthService } from '../services/auth.service'
-import { FirebaseLoginSchema, RefreshTokenSchema } from '../schemas/auth.schema'
+import { SupabaseLoginSchema, RefreshTokenSchema } from '../schemas/auth.schema'
 
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   /**
    * POST /auth/login
-   * Login with Firebase ID token
+   * Login with Supabase access token (Google OAuth via Supabase)
    */
   login = async (request: FastifyRequest, reply: FastifyReply) => {
-    const dto = FirebaseLoginSchema.parse(request.body)
+    const dto = SupabaseLoginSchema.parse(request.body)
     const ip = request.ip
 
-    const result = await this.authService.loginWithFirebase(dto, ip)
+    const result = await this.authService.loginWithSupabase(dto, ip)
 
-    // Set refresh token as httpOnly cookie (optional but recommended)
     reply.setCookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
@@ -32,7 +31,6 @@ export class AuthController {
    * Refresh access token
    */
   refresh = async (request: FastifyRequest, reply: FastifyReply) => {
-    // Try to get refresh token from cookie first, then body
     const refreshToken =
       request.cookies['refreshToken'] || RefreshTokenSchema.parse(request.body).refreshToken
 
@@ -76,7 +74,7 @@ export class AuthController {
 
     return reply.status(200).send({
       id: currentUser.id,
-      firebaseUid: currentUser.firebaseUid,
+      supabaseId: currentUser.supabaseId,
       email: currentUser.email,
       phone: currentUser.phone,
       name: currentUser.name,

@@ -18,8 +18,9 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('30m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
 
-  // Firebase
-  FIREBASE_SERVICE_ACCOUNT_PATH: z.string(),
+  // Supabase
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
   // Security
   CORS_ORIGIN: z.string().default('*'),

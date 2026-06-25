@@ -7,43 +7,19 @@ import { AuthController } from '../controllers/auth.controller'
 import { authenticate } from '../middleware/authenticate'
 
 export async function authRoutes(app: FastifyInstance) {
-  // Dependency injection
   const db = getDb()
   const userRepository = new UserRepository(db)
   const sessionRepository = new SessionRepository(db)
 
-  // DEBUG: Log to see if JWT methods exist
-  console.log('🔍 DEBUG: app.jwt exists?', !!app.jwt)
-  console.log('🔍 DEBUG: app.jwt.sign exists?', !!(app.jwt && app.jwt.sign))
-  console.log('🔍 DEBUG: app.jwtRefreshSign exists?', !!(app as any).jwtRefreshSign)
-
-  // JWT service wrappers with proper typing
   const jwtService = {
-    sign: (payload: any, options?: any): string => {
-      console.log('🔑 Calling app.jwt.sign')
-      return app.jwt.sign(payload, options)
-    },
-    verify: (token: string): any => {
-      console.log('🔑 Calling app.jwt.verify')
-      return app.jwt.verify(token)
-    },
+    sign: (payload: any, options?: any): string => app.jwt.sign(payload, options),
+    verify: (token: string): any => app.jwt.verify(token),
   }
 
   const jwtRefreshService = {
-    sign: (payload: any, options?: any): string => {
-      console.log('🔑 Calling app.jwtRefreshSign')
-      return (app as any).jwtRefreshSign(payload, options)
-    },
-    verify: (token: string): any => {
-      console.log('🔑 Calling app.jwtRefreshVerify')
-      return (app as any).jwtRefreshVerify(token)
-    },
+    sign: (payload: any, options?: any): string => (app as any).jwtRefreshSign(payload, options),
+    verify: (token: string): any => (app as any).jwtRefreshVerify(token),
   }
-
-  console.log('✅ JWT services created:', {
-    jwtService: !!jwtService,
-    jwtRefreshService: !!jwtRefreshService,
-  })
 
   const authService = new AuthService(
     userRepository,
@@ -51,8 +27,6 @@ export async function authRoutes(app: FastifyInstance) {
     jwtService,
     jwtRefreshService,
   )
-
-  console.log('✅ AuthService created')
 
   const authController = new AuthController(authService)
 
@@ -64,12 +38,12 @@ export async function authRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Login with Firebase ID token',
+        summary: 'Login with Supabase access token (Google OAuth via Supabase)',
         body: {
           type: 'object',
-          required: ['idToken'],
+          required: ['accessToken'],
           properties: {
-            idToken: { type: 'string', description: 'Firebase ID token' },
+            accessToken: { type: 'string', description: 'Supabase session access_token' },
             deviceInfo: {
               type: 'object',
               properties: {
@@ -89,13 +63,12 @@ export async function authRoutes(app: FastifyInstance) {
                 type: 'object',
                 properties: {
                   id: { type: 'string' },
-                  firebaseUid: { type: 'string' },
+                  supabaseId: { type: 'string' },
                   email: { type: ['string', 'null'] },
                   phone: { type: ['string', 'null'] },
                   name: { type: 'string' },
                   role: { type: 'string', enum: ['user', 'astrologer', 'admin'] },
                   isOnboarded: { type: 'boolean' },
-                  
                 },
               },
             },
@@ -178,7 +151,7 @@ export async function authRoutes(app: FastifyInstance) {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              firebaseUid: { type: 'string' },
+              supabaseId: { type: 'string' },
               email: { type: ['string', 'null'] },
               phone: { type: ['string', 'null'] },
               name: { type: 'string' },

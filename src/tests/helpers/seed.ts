@@ -32,7 +32,7 @@ export async function seedTestUsers() {
     .insert(users)
     .values({
       id: TEST_ASTROLOGER_ID,
-      firebaseUid: 'test-firebase-astrologer-seed-001',
+      supabaseId: 'test-supabase-astrologer-seed-001',
       name: '[TEST] Arjun Sharma',
       email: 'test.astrologer@astrobook.test',
       role: 'astrologer',
@@ -46,7 +46,7 @@ export async function seedTestUsers() {
     .insert(users)
     .values({
       id: TEST_USER_ID,
-      firebaseUid: 'test-firebase-user-seed-002',
+      supabaseId: 'test-supabase-user-seed-002',
       name: '[TEST] Priya Mehta',
       email: 'test.user@astrobook.test',
       role: 'user',
