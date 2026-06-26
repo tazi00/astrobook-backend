@@ -9,7 +9,10 @@
       "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && node -e \"\nrequire\\('dotenv/config'\\)\nconst { Pool } = require\\('pg'\\)\nconst pool = new Pool\\({ connectionString: process.env.DATABASE_URL }\\)\npool.query\\(\\\\`\n  SELECT schemaname, tablename\n  FROM pg_tables\n  WHERE tablename LIKE '%migrat%' OR tablename LIKE '%drizzle%'\n\\\\`\\).then\\(r => {\n  console.log\\('Migration-related tables:', JSON.stringify\\(r.rows, null, 2\\)\\)\n  pool.end\\(\\)\n}\\).catch\\(e => { console.error\\(e.message\\); pool.end\\(\\) }\\)\n\" 2>&1)",
       "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && node -e \"\nrequire\\('dotenv/config'\\)\nconst { Pool } = require\\('pg'\\)\nconst pool = new Pool\\({ connectionString: process.env.DATABASE_URL }\\)\npool.query\\('SELECT * FROM drizzle.__drizzle_migrations ORDER BY created_at'\\).then\\(r => {\n  console.log\\('Applied migrations:'\\)\n  r.rows.forEach\\(row => console.log\\(' -', row.hash, '|', new Date\\(Number\\(row.created_at\\)\\).toISOString\\(\\)\\)\\)\n  pool.end\\(\\)\n}\\).catch\\(e => { console.error\\(e.message\\); pool.end\\(\\) }\\)\n\" 2>&1)",
       "Bash(cd /c/Users/majum/OneDrive/Desktop/projects/astrobook-backend && npm test 2>&1)",
-      "PowerShell(cd \"C:\\\\Users\\\\majum\\\\OneDrive\\\\Desktop\\\\mrgroup-projects\\\\astrobook-backend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"firebase|Firebase|supabase|Supabase\" })"
+      "PowerShell(cd \"C:\\\\Users\\\\majum\\\\OneDrive\\\\Desktop\\\\mrgroup-projects\\\\astrobook-backend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"firebase|Firebase|supabase|Supabase\" })",
+      "PowerShell(graphify install *)",
+      "Bash(python \"graphify-out/mf.py\")",
+      "Bash(rm -f graphify-out/.graphify_detect.json graphify-out/.graphify_extract.json graphify-out/.graphify_ast.json graphify-out/.graphify_semantic.json graphify-out/.graphify_analysis.json graphify-out/mf.py graphify-out/.graphify_chunk_*.json)"
     ]
   },
   "enabledMcpjsonServers": [
