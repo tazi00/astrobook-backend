@@ -1,7 +1,6 @@
-import { eq, or } from 'drizzle-orm'
+import { eq, and, gt, lt, count, sql } from 'drizzle-orm'
 import type { Database } from '@/core/database/client'
-import { users } from '@/core/database/schema'
-import type { NewUser } from '@/core/database/schema'
+import { users, otpVerifications } from '@/core/database/schema'
 
 export class UserRepository {
   constructor(private readonly db: Database) {}
@@ -11,12 +10,8 @@ export class UserRepository {
     return user ?? null
   }
 
-  async findBySupabaseId(supabaseId: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.supabaseId, supabaseId))
-      .limit(1)
+  async findByPhone(phone: string) {
+    const [user] = await this.db.select().from(users).where(eq(users.phone, phone)).limit(1)
     return user ?? null
   }
 
@@ -25,38 +20,97 @@ export class UserRepository {
     return user ?? null
   }
 
-  async findByPhone(phone: string) {
-    const [user] = await this.db.select().from(users).where(eq(users.phone, phone)).limit(1)
+  async findByGoogleId(googleId: string) {
+    const [user] = await this.db.select().from(users).where(eq(users.googleId, googleId)).limit(1)
     return user ?? null
   }
 
-  async findByEmailOrPhone(email?: string, phone?: string) {
-    if (!email && !phone) return null
-
-    const conditions = []
-    if (email) conditions.push(eq(users.email, email))
-    if (phone) conditions.push(eq(users.phone, phone))
-
+  async createUser(phone: string) {
     const [user] = await this.db
-      .select()
-      .from(users)
-      .where(or(...conditions))
-      .limit(1)
-
-    return user ?? null
-  }
-
-  async create(data: NewUser) {
-    const [user] = await this.db.insert(users).values(data).returning()
+      .insert(users)
+      .values({ phone, role: 'user', isOnboarded: false })
+      .returning()
     return user!
   }
 
-  async updateOnboardingStatus(id: string, isOnboarded: boolean) {
+  async createGoogleUser(data: {
+    googleId: string
+    email?: string
+    name?: string
+    avatarUrl?: string
+  }) {
     const [user] = await this.db
-      .update(users)
-      .set({ isOnboarded, updatedAt: new Date() })
-      .where(eq(users.id, id))
+      .insert(users)
+      .values({
+        googleId:   data.googleId,
+        email:      data.email ?? null,
+        name:       data.name ?? null,
+        avatarUrl:  data.avatarUrl ?? null,
+        role:       'user',
+        isOnboarded: false,
+      })
       .returning()
-    return user ?? null
+    return user!
+  }
+
+  async linkGoogleId(userId: string, googleId: string) {
+    await this.db
+      .update(users)
+      .set({ googleId, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+  }
+
+  // ─── OTP Methods ────────────────────────────────────────────────────────────
+
+  async createOtp(phone: string, otpHash: string, expiresAt: Date) {
+    // Purane expired OTPs clean karo
+    await this.db
+      .delete(otpVerifications)
+      .where(and(
+        eq(otpVerifications.phone, phone),
+        lt(otpVerifications.expiresAt, new Date())
+      ))
+
+    const [otp] = await this.db
+      .insert(otpVerifications)
+      .values({ phone, otpHash, expiresAt })
+      .returning()
+    return otp!
+  }
+
+  async findLatestOtp(phone: string) {
+    const [otp] = await this.db
+      .select()
+      .from(otpVerifications)
+      .where(and(
+        eq(otpVerifications.phone, phone),
+        gt(otpVerifications.expiresAt, new Date())
+      ))
+      .orderBy(sql`${otpVerifications.createdAt} DESC`)
+      .limit(1)
+    return otp ?? null
+  }
+
+  async incrementOtpAttempts(id: string) {
+    await this.db
+      .update(otpVerifications)
+      .set({ attempts: sql`${otpVerifications.attempts} + 1` })
+      .where(eq(otpVerifications.id, id))
+  }
+
+  async deleteOtp(id: string) {
+    await this.db.delete(otpVerifications).where(eq(otpVerifications.id, id))
+  }
+
+  async countRecentOtpRequests(phone: string): Promise<number> {
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const [result] = await this.db
+      .select({ count: count() })
+      .from(otpVerifications)
+      .where(and(
+        eq(otpVerifications.phone, phone),
+        gt(otpVerifications.createdAt, tenMinAgo)
+      ))
+    return result?.count ?? 0
   }
 }

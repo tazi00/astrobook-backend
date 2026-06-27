@@ -57,3 +57,5 @@ export const InternalError = (msg: string) => new AppError('INTERNAL_ERROR', msg
 export const InvalidTokenError = (msg: string) => new AppError('INVALID_TOKEN', msg)
 export const TokenExpiredError = (msg: string) => new AppError('TOKEN_EXPIRED', msg)
 export const MaxSessionsExceededError = (msg: string) => new AppError('MAX_SESSIONS_EXCEEDED', msg)
+
+export const RateLimitError = (msg: string) => new AppError('MAX_SESSIONS_EXCEEDED', msg)

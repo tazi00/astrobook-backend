@@ -1,15 +1,44 @@
-import { verifySupabaseToken } from '@/core/utils/supabase'
-import { UnauthorizedError, InvalidTokenError, TokenExpiredError } from '@/core/errors'
+import bcrypt from 'bcrypt'
+import crypto from 'crypto'
+import axios from 'axios'
+import { OAuth2Client } from 'google-auth-library'
+import { env } from '@/config/env'
+import {
+  UnauthorizedError,
+  InvalidTokenError,
+  TokenExpiredError,
+  BadRequestError,
+  RateLimitError,
+} from '@/core/errors'
 import type { UserRepository } from '../repositories/user.repository'
 import type { SessionRepository } from '../repositories/session.repository'
-import type { SupabaseLoginDto, AuthResponse } from '../schemas/auth.schema'
-import { env } from '@/config/env'
-import crypto from 'crypto'
+import type { AuthResponse } from '../schemas/auth.schema'
 
 interface JWTService {
   sign(payload: any, options?: any): string
   verify<T = any>(token: string): T
 }
+
+// ─── SMS Helper ───────────────────────────────────────────────────────────────
+
+async function sendOtpSms(phone: string, otp: string): Promise<void> {
+  if (env.NODE_ENV === 'development') {
+    console.log(`\n🔐 [DEV OTP] ${phone} → ${otp}\n`)
+    return
+  }
+  await axios.post(
+    'https://api.msg91.com/api/v5/otp',
+    {
+      authkey:     env.MSG91_AUTH_KEY,
+      template_id: env.MSG91_TEMPLATE_ID,
+      mobile:      phone.replace('+', ''),
+      otp,
+    },
+    { headers: { 'Content-Type': 'application/json' } }
+  )
+}
+
+// ─── AuthService ──────────────────────────────────────────────────────────────
 
 export class AuthService {
   constructor(
@@ -19,93 +48,128 @@ export class AuthService {
     private readonly jwtRefreshService: JWTService,
   ) {}
 
-  async loginWithSupabase(dto: SupabaseLoginDto, ip?: string): Promise<AuthResponse> {
-    let supabaseUser: any
-    try {
-      supabaseUser = await verifySupabaseToken(dto.accessToken)
-    } catch (error) {
-      throw InvalidTokenError('Invalid Supabase access token')
+  // ── Send OTP ────────────────────────────────────────────────────────────────
+
+  async sendOtp(phone: string): Promise<void> {
+    const recentCount = await this.userRepository.countRecentOtpRequests(phone)
+    if (recentCount >= 3) {
+      throw RateLimitError('Bahut zyada OTP requests. 10 min baad try karo.')
     }
 
-    const supabaseId = supabaseUser.id as string
-    const email = supabaseUser.email ?? null
-    const phone = supabaseUser.phone ?? null
-    const name: string =
-      supabaseUser.user_metadata?.full_name ??
-      supabaseUser.user_metadata?.name ??
-      email?.split('@')[0] ??
-      'User'
+    const otp = String(Math.floor(100000 + Math.random() * 900000))
+    const otpHash = await bcrypt.hash(otp, 10)
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
 
-    let user = await this.userRepository.findBySupabaseId(supabaseId)
+    await this.userRepository.createOtp(phone, otpHash, expiresAt)
+    await sendOtpSms(phone, otp)
+  }
+
+  // ── Verify OTP ──────────────────────────────────────────────────────────────
+
+  async verifyOtp(phone: string, otp: string): Promise<AuthResponse> {
+    const otpRecord = await this.userRepository.findLatestOtp(phone)
+
+    if (!otpRecord) {
+      throw BadRequestError('OTP expired ya bheja nahi gaya. Dobara try karo.')
+    }
+
+    if (otpRecord.attempts >= 3) {
+      throw RateLimitError('3 baar galat OTP. OTP dobara bhejo.')
+    }
+
+    const isMatch = await bcrypt.compare(otp, otpRecord.otpHash)
+    if (!isMatch) {
+      await this.userRepository.incrementOtpAttempts(otpRecord.id)
+      throw BadRequestError('Wrong OTP')
+    }
+
+    await this.userRepository.deleteOtp(otpRecord.id)
+
+    let user = await this.userRepository.findByPhone(phone)
+    const isNewUser = !user
 
     if (!user) {
-      user = await this.userRepository.create({
-        supabaseId,
-        email: email ?? null,
-        phone: phone ?? null,
-        name,
-        role: 'user',
-        isOnboarded: false,
-      })
+      user = await this.userRepository.createUser(phone)
     }
 
-    const accessToken = this.jwtService.sign(
-      {
-        userId: user.id,
-        role: user.role,
-        isOnboarded: user.isOnboarded,
-      },
-      { expiresIn: env.JWT_ACCESS_EXPIRES_IN },
-    )
-
-    const refreshToken = this.jwtRefreshService.sign(
-      { userId: user.id, tokenId: crypto.randomUUID() },
-      { expiresIn: env.JWT_REFRESH_EXPIRES_IN },
-    )
-
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 30)
-
-    await this.sessionRepository.enforceSessionLimit(user.id)
-
-    await this.sessionRepository.create({
-      userId: user.id,
-      refreshToken,
-      deviceInfo: {
-        userAgent: dto.deviceInfo?.userAgent,
-        ip,
-        platform: dto.deviceInfo?.platform,
-      },
-      expiresAt,
-    })
+    const { accessToken, refreshToken } = await this._createTokens(user)
 
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        supabaseId: user.supabaseId,
-        email: user.email,
-        phone: user.phone,
-        name: user.name,
-        role: user.role,
-        isOnboarded: user.isOnboarded,
-      },
+      user: this._formatUser(user),
+      isNewUser,
     }
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
+  // ── Google Login ─────────────────────────────────────────────────────────────
+
+  async googleLogin(idToken: string): Promise<AuthResponse> {
+    if (!env.GOOGLE_CLIENT_ID) {
+      throw InvalidTokenError('Google login configure nahi hai')
+    }
+
+    // Google token verify karo
+    const client = new OAuth2Client(env.GOOGLE_CLIENT_ID)
+    let payload: any
+
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: env.GOOGLE_CLIENT_ID,
+      })
+      payload = ticket.getPayload()
+    } catch {
+      throw InvalidTokenError('Invalid Google token')
+    }
+
+    if (!payload) throw InvalidTokenError('Google token payload empty')
+
+    const googleId = payload.sub as string
+    const email    = payload.email as string | undefined
+    const name     = payload.name as string | undefined
+    const avatar   = payload.picture as string | undefined
+
+    // Pehle googleId se dhundho
+    let user = await this.userRepository.findByGoogleId(googleId)
+
+    // Phir email se dhundho (same account — phone + google)
+    if (!user && email) {
+      user = await this.userRepository.findByEmail(email)
+      if (user) {
+        // Account link karo
+        await this.userRepository.linkGoogleId(user.id, googleId)
+      }
+    }
+
+    const isNewUser = !user
+
+    if (!user) {
+      user = await this.userRepository.createGoogleUser({ googleId, email, name, avatarUrl: avatar })
+    }
+
+    const { accessToken, refreshToken } = await this._createTokens(user)
+
+    return {
+      accessToken,
+      refreshToken,
+      user: this._formatUser(user),
+      isNewUser,
+    }
+  }
+
+  // ── Refresh Tokens ──────────────────────────────────────────────────────────
+
+  async refreshTokens(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     let decoded: any
     try {
       decoded = this.jwtRefreshService.verify(refreshToken)
-    } catch (error) {
-      throw TokenExpiredError('Refresh token expired or invalid')
+    } catch {
+      throw TokenExpiredError('Refresh token expired ya invalid')
     }
 
     const session = await this.sessionRepository.findByRefreshToken(refreshToken)
-    if (!session) {
-      throw UnauthorizedError('Invalid refresh token')
-    }
+    if (!session) throw UnauthorizedError('Invalid refresh token')
 
     if (new Date() > session.expiresAt) {
       await this.sessionRepository.deleteById(session.id)
@@ -113,21 +177,15 @@ export class AuthService {
     }
 
     const user = await this.userRepository.findById(decoded.userId)
-    if (!user) {
-      throw UnauthorizedError('User not found')
-    }
+    if (!user) throw UnauthorizedError('User not found')
 
-    const accessToken = this.jwtService.sign(
-      {
-        userId: user.id,
-        role: user.role,
-        isOnboarded: user.isOnboarded,
-      },
-      { expiresIn: env.JWT_ACCESS_EXPIRES_IN },
-    )
+    // Purana session delete — rotation
+    await this.sessionRepository.deleteById(session.id)
 
-    return { accessToken }
+    return this._createTokens(user)
   }
+
+  // ── Logout ──────────────────────────────────────────────────────────────────
 
   async logout(refreshToken: string): Promise<void> {
     await this.sessionRepository.deleteByRefreshToken(refreshToken)
@@ -137,11 +195,43 @@ export class AuthService {
     await this.sessionRepository.deleteByUserId(userId)
   }
 
+  // ── Get Current User ────────────────────────────────────────────────────────
+
   async getCurrentUser(userId: string) {
     const user = await this.userRepository.findById(userId)
-    if (!user) {
-      throw UnauthorizedError('User not found')
-    }
+    if (!user) throw UnauthorizedError('User not found')
     return user
+  }
+
+  // ── Private Helpers ─────────────────────────────────────────────────────────
+
+  private async _createTokens(user: { id: string; role: string }) {
+    const accessToken = this.jwtService.sign(
+      { userId: user.id, role: user.role },
+      { expiresIn: env.JWT_ACCESS_EXPIRES_IN }
+    )
+    const refreshToken = this.jwtRefreshService.sign(
+      { userId: user.id, tokenId: crypto.randomUUID() },
+      { expiresIn: env.JWT_REFRESH_EXPIRES_IN }
+    )
+
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 30)
+
+    await this.sessionRepository.enforceSessionLimit(user.id)
+    await this.sessionRepository.create({ userId: user.id, refreshToken, expiresAt })
+
+    return { accessToken, refreshToken }
+  }
+
+  private _formatUser(user: any) {
+    return {
+      id:          user.id,
+      phone:       user.phone,
+      email:       user.email,
+      name:        user.name,
+      role:        user.role,
+      isOnboarded: user.isOnboarded,
+    }
   }
 }

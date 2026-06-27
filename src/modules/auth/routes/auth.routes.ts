@@ -12,13 +12,13 @@ export async function authRoutes(app: FastifyInstance) {
   const sessionRepository = new SessionRepository(db)
 
   const jwtService = {
-    sign: (payload: any, options?: any): string => app.jwt.sign(payload, options),
-    verify: (token: string): any => app.jwt.verify(token),
+    sign: (payload: any, options?: any) => app.jwt.sign(payload, options),
+    verify: <T = any>(token: string): T => app.jwt.verify(token) as T,
   }
 
   const jwtRefreshService = {
-    sign: (payload: any, options?: any): string => (app as any).jwtRefreshSign(payload, options),
-    verify: (token: string): any => (app as any).jwtRefreshVerify(token),
+    sign: (payload: any, options?: any) => (app as any).jwtRefreshSign(payload, options),
+    verify: <T = any>(token: string): T => (app as any).jwtRefreshVerify(token) as T,
   }
 
   const authService = new AuthService(
@@ -27,56 +27,66 @@ export async function authRoutes(app: FastifyInstance) {
     jwtService,
     jwtRefreshService,
   )
-
   const authController = new AuthController(authService)
 
   const prefix = '/auth'
 
-  // POST /auth/login
+  // POST /auth/send-otp
   app.post(
-    `${prefix}/login`,
+    `${prefix}/send-otp`,
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Login with Supabase access token (Google OAuth via Supabase)',
+        summary: 'Phone number pe OTP bhejo',
         body: {
           type: 'object',
-          required: ['accessToken'],
+          required: ['phone'],
           properties: {
-            accessToken: { type: 'string', description: 'Supabase session access_token' },
-            deviceInfo: {
-              type: 'object',
-              properties: {
-                userAgent: { type: 'string' },
-                platform: { type: 'string' },
-              },
-            },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              accessToken: { type: 'string' },
-              refreshToken: { type: 'string' },
-              user: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  supabaseId: { type: 'string' },
-                  email: { type: ['string', 'null'] },
-                  phone: { type: ['string', 'null'] },
-                  name: { type: 'string' },
-                  role: { type: 'string', enum: ['user', 'astrologer', 'admin'] },
-                  isOnboarded: { type: 'boolean' },
-                },
-              },
-            },
+            phone: { type: 'string' },
           },
         },
       },
     },
-    authController.login,
+    authController.sendOtp,
+  )
+
+  // POST /auth/verify-otp
+  app.post(
+    `${prefix}/verify-otp`,
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'OTP verify karo — login ya register',
+        body: {
+          type: 'object',
+          required: ['phone', 'otp'],
+          properties: {
+            phone: { type: 'string' },
+            otp: { type: 'string', minLength: 6, maxLength: 6 },
+          },
+        },
+      },
+    },
+    authController.verifyOtp,
+  )
+
+  // POST /auth/google
+  app.post(
+    `${prefix}/google`,
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Google idToken se login karo',
+        body: {
+          type: 'object',
+          required: ['idToken'],
+          properties: {
+            idToken: { type: 'string' },
+          },
+        },
+      },
+    },
+    authController.googleLogin,
   )
 
   // POST /auth/refresh
@@ -85,19 +95,12 @@ export async function authRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Refresh access token',
+        summary: 'Naya accessToken + refreshToken lo (rotation)',
         body: {
           type: 'object',
+          required: ['refreshToken'],
           properties: {
             refreshToken: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              accessToken: { type: 'string' },
-            },
           },
         },
       },
@@ -111,9 +114,13 @@ export async function authRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Logout current session',
-        response: {
-          204: { type: 'null' },
+        summary: 'Current session logout karo',
+        body: {
+          type: 'object',
+          required: ['refreshToken'],
+          properties: {
+            refreshToken: { type: 'string' },
+          },
         },
       },
     },
@@ -127,11 +134,8 @@ export async function authRoutes(app: FastifyInstance) {
       preHandler: [authenticate],
       schema: {
         tags: ['Auth'],
-        summary: 'Logout from all devices',
+        summary: 'Sabhi devices se logout karo',
         security: [{ bearerAuth: [] }],
-        response: {
-          204: { type: 'null' },
-        },
       },
     },
     authController.logoutAll,
@@ -144,23 +148,8 @@ export async function authRoutes(app: FastifyInstance) {
       preHandler: [authenticate],
       schema: {
         tags: ['Auth'],
-        summary: 'Get current user',
+        summary: 'Current user fetch karo',
         security: [{ bearerAuth: [] }],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              supabaseId: { type: 'string' },
-              email: { type: ['string', 'null'] },
-              phone: { type: ['string', 'null'] },
-              name: { type: 'string' },
-              role: { type: 'string' },
-              isOnboarded: { type: 'boolean' },
-              createdAt: { type: 'string' },
-            },
-          },
-        },
       },
     },
     authController.me,

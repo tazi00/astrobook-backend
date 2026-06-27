@@ -11,12 +11,8 @@ export class UserRepository {
     return user ?? null
   }
 
-  async findBySupabaseId(supabaseId: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.supabaseId, supabaseId))
-      .limit(1)
+  async findByPhone(phone: string) {
+    const [user] = await this.db.select().from(users).where(eq(users.phone, phone)).limit(1)
     return user ?? null
   }
 
@@ -24,13 +20,12 @@ export class UserRepository {
     const [user] = await this.db
       .update(users)
       .set({
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
-        dateOfBirth: dto.dateOfBirth,
-        interests: dto.interests,
+        name:        dto.name,
+        email:       dto.email ?? null,
+        dateOfBirth: dto.dateOfBirth ?? null,
+        interests:   dto.interests ?? [],
         isOnboarded: true,
-        updatedAt: sql`now()`,
+        updatedAt:   sql`now()`,
       })
       .where(eq(users.id, userId))
       .returning()
@@ -40,10 +35,7 @@ export class UserRepository {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const [user] = await this.db
       .update(users)
-      .set({
-        ...dto,
-        updatedAt: sql`now()`,
-      })
+      .set({ ...dto, updatedAt: sql`now()` })
       .where(eq(users.id, userId))
       .returning()
     return user ?? null
@@ -52,11 +44,7 @@ export class UserRepository {
   async upgradeToAstrologer(userId: string) {
     const [user] = await this.db
       .update(users)
-      .set({
-        isAstrologer: true,
-        role: 'astrologer',
-        updatedAt: sql`now()`,
-      })
+      .set({ isAstrologer: true, role: 'astrologer', updatedAt: sql`now()` })
       .where(eq(users.id, userId))
       .returning()
     return user ?? null

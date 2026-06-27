@@ -1,86 +1,69 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { AuthService } from '../services/auth.service'
-import { SupabaseLoginSchema, RefreshTokenSchema } from '../schemas/auth.schema'
+import { SendOtpSchema, VerifyOtpSchema, RefreshTokenSchema, LogoutSchema, GoogleLoginSchema } from '../schemas/auth.schema'
 
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  /**
-   * POST /auth/login
-   * Login with Supabase access token (Google OAuth via Supabase)
-   */
-  login = async (request: FastifyRequest, reply: FastifyReply) => {
-    const dto = SupabaseLoginSchema.parse(request.body)
-    const ip = request.ip
-
-    const result = await this.authService.loginWithSupabase(dto, ip)
-
-    reply.setCookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60, // 30 days
-      path: '/',
-    })
-
-    return reply.status(200).send(result)
+  // POST /auth/send-otp
+  sendOtp = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { phone } = SendOtpSchema.parse(request.body)
+    await this.authService.sendOtp(phone)
+    return reply.status(200).send({ success: true })
   }
 
-  /**
-   * POST /auth/refresh
-   * Refresh access token
-   */
+  // POST /auth/verify-otp
+  verifyOtp = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { phone, otp } = VerifyOtpSchema.parse(request.body)
+    const result = await this.authService.verifyOtp(phone, otp)
+    return reply.status(200).send({ success: true, data: result })
+  }
+
+  // POST /auth/refresh
   refresh = async (request: FastifyRequest, reply: FastifyReply) => {
-    const refreshToken =
-      request.cookies['refreshToken'] || RefreshTokenSchema.parse(request.body).refreshToken
-
-    const result = await this.authService.refreshAccessToken(refreshToken)
-    return reply.status(200).send(result)
+    const { refreshToken } = RefreshTokenSchema.parse(request.body)
+    const result = await this.authService.refreshTokens(refreshToken)
+    return reply.status(200).send({ success: true, data: result })
   }
 
-  /**
-   * POST /auth/logout
-   * Logout current session
-   */
+  // POST /auth/logout
   logout = async (request: FastifyRequest, reply: FastifyReply) => {
-    const refreshToken =
-      request.cookies['refreshToken'] || RefreshTokenSchema.parse(request.body).refreshToken
-
+    const { refreshToken } = LogoutSchema.parse(request.body)
     await this.authService.logout(refreshToken)
-
-    reply.clearCookie('refreshToken')
-    return reply.status(204).send()
+    return reply.status(200).send({ success: true })
   }
 
-  /**
-   * POST /auth/logout-all
-   * Logout from all devices
-   */
+  // POST /auth/logout-all
   logoutAll = async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user as { userId: string }
     await this.authService.logoutAll(user.userId)
-
-    reply.clearCookie('refreshToken')
-    return reply.status(204).send()
+    return reply.status(200).send({ success: true })
   }
 
-  /**
-   * GET /auth/me
-   * Get current user
-   */
+
+  // POST /auth/google
+  googleLogin = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { idToken } = GoogleLoginSchema.parse(request.body)
+    const result = await this.authService.googleLogin(idToken)
+    return reply.status(200).send({ success: true, data: result })
+  }
+
+  // GET /auth/me
   me = async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user as { userId: string }
     const currentUser = await this.authService.getCurrentUser(user.userId)
-
     return reply.status(200).send({
-      id: currentUser.id,
-      supabaseId: currentUser.supabaseId,
-      email: currentUser.email,
-      phone: currentUser.phone,
-      name: currentUser.name,
-      role: currentUser.role,
-      isOnboarded: currentUser.isOnboarded,
-      createdAt: currentUser.createdAt,
+      success: true,
+      data: {
+        user: {
+          id:          currentUser.id,
+          phone:       currentUser.phone,
+          email:       currentUser.email,
+          name:        currentUser.name,
+          role:        currentUser.role,
+          isOnboarded: currentUser.isOnboarded,
+        }
+      }
     })
   }
 }

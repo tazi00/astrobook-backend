@@ -1,41 +1,67 @@
 import { z } from 'zod'
 
-// ─── Login ────────────────────────────────────────────────────────────────────
+// ─── Send OTP ─────────────────────────────────────────────────────────────────
 
-export const SupabaseLoginSchema = z.object({
-  accessToken: z.string().min(1, 'Supabase access token is required'),
-  deviceInfo: z
-    .object({
-      userAgent: z.string().optional(),
-      platform: z.string().optional(),
-    })
-    .optional(),
+export const SendOtpSchema = z.object({
+  phone: z
+    .string()
+    .regex(/^\+91[6-9]\d{9}$/, 'Valid Indian phone number daalo (+91XXXXXXXXXX)'),
 })
 
-// ─── Refresh ──────────────────────────────────────────────────────────────────
+// ─── Verify OTP ───────────────────────────────────────────────────────────────
+
+export const VerifyOtpSchema = z.object({
+  phone: z
+    .string()
+    .regex(/^\+91[6-9]\d{9}$/, 'Valid Indian phone number daalo'),
+  otp: z
+    .string()
+    .length(6, 'OTP 6 digits ka hona chahiye')
+    .regex(/^\d+$/, 'OTP sirf numbers'),
+})
+
+// ─── Refresh Token ────────────────────────────────────────────────────────────
 
 export const RefreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, 'Refresh token is required'),
+  refreshToken: z.string().min(1, 'Refresh token required'),
 })
 
-// ─── Response ─────────────────────────────────────────────────────────────────
+// ─── Logout ───────────────────────────────────────────────────────────────────
+
+export const LogoutSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token required'),
+})
+
+// ─── Response Types ───────────────────────────────────────────────────────────
+
+export const UserResponseSchema = z.object({
+  id:          z.string().uuid(),
+  phone:       z.string().nullable(),
+  email:       z.string().nullable(),
+  name:        z.string().nullable(),
+  role:        z.enum(['user', 'astrologer', 'admin']),
+  isOnboarded: z.boolean(),
+})
 
 export const AuthResponseSchema = z.object({
-  accessToken: z.string(),
+  accessToken:  z.string(),
   refreshToken: z.string(),
-  user: z.object({
-    id: z.string().uuid(),
-    supabaseId: z.string(),
-    email: z.string().email().nullable(),
-    phone: z.string().nullable(),
-    name: z.string(),
-    role: z.enum(['user', 'astrologer', 'admin']),
-    isOnboarded: z.boolean(),
-  }),
+  user:         UserResponseSchema,
+  isNewUser:    z.boolean(),
 })
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SupabaseLoginDto = z.infer<typeof SupabaseLoginSchema>
+export type SendOtpDto    = z.infer<typeof SendOtpSchema>
+export type VerifyOtpDto  = z.infer<typeof VerifyOtpSchema>
 export type RefreshTokenDto = z.infer<typeof RefreshTokenSchema>
-export type AuthResponse = z.infer<typeof AuthResponseSchema>
+export type AuthResponse  = z.infer<typeof AuthResponseSchema>
+export type UserResponse  = z.infer<typeof UserResponseSchema>
+
+// ─── Google Login ─────────────────────────────────────────────────────────────
+
+export const GoogleLoginSchema = z.object({
+  idToken: z.string().min(1, 'Google ID token required'),
+})
+
+export type GoogleLoginDto = z.infer<typeof GoogleLoginSchema>

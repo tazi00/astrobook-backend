@@ -44,15 +44,17 @@ export async function registerPlugins(app: FastifyInstance) {
   })
 
   // JWT - Refresh Token with custom methods
-  app.decorate('jwtRefreshSign', function (payload: any, options: any) {
+  app.decorate('jwtRefreshSign', function (payload: object, options: object) {
+    // @ts-ignore
     return app.jwt.sign(
-      payload,
+      { ...payload },
       { ...options, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
-      { secret: env.JWT_REFRESH_SECRET },
+      env.JWT_REFRESH_SECRET,
     )
   })
 
   app.decorate('jwtRefreshVerify', function (token: string) {
+    // @ts-ignore
     return app.jwt.verify(token, { secret: env.JWT_REFRESH_SECRET })
   })
 

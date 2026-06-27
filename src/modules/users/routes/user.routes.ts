@@ -26,7 +26,7 @@ export async function userRoutes(app: FastifyInstance) {
         security: [{ bearerAuth: [] }],
         body: {
           type: 'object',
-          required: ['name', 'dateOfBirth', 'interests'],
+          required: ['name'],
           properties: {
             name: { type: 'string', minLength: 2 },
             email: { type: 'string', format: 'email' },
@@ -67,7 +67,6 @@ export async function userRoutes(app: FastifyInstance) {
             type: 'object',
             properties: {
               id: { type: 'string' },
-              supabaseId: { type: 'string' },
               email: { type: ['string', 'null'] },
               phone: { type: ['string', 'null'] },
               name: { type: 'string' },
