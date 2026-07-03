@@ -6,6 +6,7 @@ import { userRoutes } from '@/modules/users'
 import { consultationRoutes } from '@/modules/consultation'
 import { astrologerRoutes } from './modules/astrologers/routes/astrologer.routes'
 import { paymentRoutes } from './modules/payment/routes/payment.routes'
+import { postsRoutes } from './modules/posts'
 
 export async function buildApp() {
   const app = Fastify({
@@ -67,6 +68,6 @@ export async function buildApp() {
   await app.register(consultationRoutes, { prefix: apiPrefix })
   await app.register(paymentRoutes, { prefix: apiPrefix })
   await app.register(astrologerRoutes, { prefix: apiPrefix })
-
+  await app.register(postsRoutes, { prefix: apiPrefix })
   return app
 }

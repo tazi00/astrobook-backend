@@ -1,7 +1,11 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { ConsultationService } from '../services/consultation.service'
 import type { BookingService } from '../services/booking.service'
-import { UpsertServiceSchema, CreateAvailabilitySchema } from '../schemas/consultation.schema'
+import {
+  UpsertServiceSchema,
+  CreateAvailabilitySchema,
+  GetSlotsQuerySchema,
+} from '../schemas/consultation.schema'
 
 export class AstrologerConsultationController {
   constructor(
@@ -13,39 +17,44 @@ export class AstrologerConsultationController {
   upsertService = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const dto = UpsertServiceSchema.parse(request.body)
-
     const service = await this.consultationService.upsertService(astrologerId, dto)
-    return reply.status(200).send({ message: 'Service saved', service })
+    return reply.status(200).send({ success: true, data: { service } })
   }
 
   // GET /consultation/services/mine
   getMyServices = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const services = await this.consultationService.getMyServices(astrologerId)
-    return reply.status(200).send({ services })
+    return reply.status(200).send({ success: true, data: { services } })
+  }
+
+  // DELETE /consultation/services/:id
+  deactivateService = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { userId: astrologerId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    await this.consultationService.deactivateService(id, astrologerId)
+    return reply.status(200).send({ success: true })
   }
 
   // POST /consultation/availability
   setAvailability = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const dto = CreateAvailabilitySchema.parse(request.body)
-
     const availability = await this.consultationService.setAvailability(astrologerId, dto)
-    return reply.status(201).send({ message: 'Availability set', availability })
+    return reply.status(201).send({ success: true, data: { availability } })
   }
 
   // GET /consultation/availability/mine
   getMyAvailability = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const availability = await this.consultationService.getMyAvailability(astrologerId)
-    return reply.status(200).send({ availability })
+    return reply.status(200).send({ success: true, data: { availability } })
   }
 
   // DELETE /consultation/availability/:id
   deleteAvailability = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const { id } = request.params as { id: string }
-
     await this.consultationService.deleteAvailability(id, astrologerId)
     return reply.status(204).send()
   }
@@ -54,9 +63,35 @@ export class AstrologerConsultationController {
   getSchedule = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
     const { date } = request.query as { date?: string }
-
     const today = date ?? new Date().toISOString().split('T')[0]!
     const schedule = await this.bookingService.getSchedule(astrologerId, today)
-    return reply.status(200).send({ date: today, schedule })
+    return reply.status(200).send({ success: true, data: { date: today, schedule } })
+  }
+}
+
+// ─── User-facing Consultation Controller ─────────────────────────────────────
+
+export class UserConsultationController {
+  constructor(private readonly consultationService: ConsultationService) {}
+
+  // GET /consultation/astrologers/:id/services
+  getAstrologerServices = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id: astrologerId } = request.params as { id: string }
+    const services = await this.consultationService.getAstrologerServices(astrologerId)
+    return reply.status(200).send({ success: true, data: { services } })
+  }
+
+  // GET /consultation/slots?astrologerId=X&serviceId=Y&date=YYYY-MM-DD
+  getSlots = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { astrologerId, serviceId, date } = GetSlotsQuerySchema.parse(request.query)
+    const slots = await this.consultationService.getAvailableSlots(astrologerId, serviceId, date)
+    return reply.status(200).send({ success: true, data: { slots } })
+  }
+
+  // GET /consultation/astrologers/:id/available-dates
+  getAvailableDates = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id: astrologerId } = request.params as { id: string }
+    const dates = await this.consultationService.getAvailableDates(astrologerId)
+    return reply.status(200).send({ success: true, data: { dates } })
   }
 }

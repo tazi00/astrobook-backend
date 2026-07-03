@@ -232,6 +232,7 @@ export class AuthService {
       name:        user.name,
       role:        user.role,
       isOnboarded: user.isOnboarded,
+      isAstrologer: user.isAstrologer,
     }
   }
 }

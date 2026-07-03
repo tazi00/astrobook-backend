@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 // ─── Service Codes ────────────────────────────────────────────────────────────
+// 101 = Basic, 102 = Standard, 103 = Premium, 104 = Elite
 
 export const SERVICE_CODES = [101, 102, 103, 104] as const
 export type ServiceCode = (typeof SERVICE_CODES)[number]
@@ -15,17 +16,13 @@ export const ServiceCodeSchema = z.union([
 // ─── Consultation Service ─────────────────────────────────────────────────────
 
 export const UpsertServiceSchema = z.object({
-  serviceCode: ServiceCodeSchema,
-  title: z.string().min(3).max(255),
+  serviceCode:      ServiceCodeSchema,
+  title:            z.string().min(3).max(255),
   shortDescription: z.string().min(10).max(500),
-  coverImage: z.string().url('Cover image must be a valid URL'),
-  about: z.string().min(20),
-  durationMinutes: z
-    .number()
-    .int()
-    .min(15, 'Minimum duration is 15 minutes')
-    .max(180, 'Maximum duration is 180 minutes'),
-  price: z.number().positive().optional(),
+  coverImage:       z.string().url('Cover image must be a valid URL'),
+  about:            z.string().min(20),
+  durationMinutes:  z.number().int().min(15).max(180),
+  price:            z.number().positive().optional(),
 })
 
 export const UpdateServiceSchema = UpsertServiceSchema.omit({ serviceCode: true }).partial()
@@ -36,10 +33,10 @@ const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 export const CreateAvailabilitySchema = z
   .object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
     startTime: z.string().regex(timeRegex, 'Start time must be HH:MM (24h)'),
-    endTime: z.string().regex(timeRegex, 'End time must be HH:MM (24h)'),
-    timezone: z.string().default('Asia/Kolkata'),
+    endTime:   z.string().regex(timeRegex, 'End time must be HH:MM (24h)'),
+    timezone:  z.string().default('Asia/Kolkata'),
   })
   .refine(
     (d) => {
@@ -58,16 +55,21 @@ export const CreateAvailabilitySchema = z
     { message: 'Availability date cannot be in the past', path: ['date'] },
   )
 
+// ─── Slots Query ──────────────────────────────────────────────────────────────
+
+export const GetSlotsQuerySchema = z.object({
+  astrologerId: z.string().uuid(),
+  serviceId:    z.string().uuid(),
+  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+})
+
 // ─── Booking ──────────────────────────────────────────────────────────────────
 
 export const CreateBookingSchema = z.object({
   astrologerId: z.string().uuid(),
-  serviceId: z.string().uuid(),
-  scheduledAt: z.string().datetime({
-    message: 'Must be a valid ISO datetime',
-    offset: true,
-  }),
-  notes: z.string().max(500).optional(),
+  serviceId:    z.string().uuid(),
+  scheduledAt:  z.string().datetime({ message: 'Must be a valid ISO datetime', offset: true }),
+  notes:        z.string().max(500).optional(),
 })
 
 // ─── Cancel Appointment ───────────────────────────────────────────────────────
@@ -83,57 +85,62 @@ export const CreatePaymentOrderSchema = z.object({
 })
 
 export const VerifyPaymentSchema = z.object({
-  appointmentId: z.string().uuid(),
-  razorpayOrderId: z.string(),
-  razorpayPaymentId: z.string(),
-  razorpaySignature: z.string(),
+  appointmentId:      z.string().uuid(),
+  razorpayOrderId:    z.string(),
+  razorpayPaymentId:  z.string(),
+  razorpaySignature:  z.string(),
 })
 
-// ─── Service Request (Mid-session upsell) ────────────────────────────────────
+// ─── Session ──────────────────────────────────────────────────────────────────
+
+export const JoinSessionSchema = z.object({
+  appointmentId: z.string().uuid(),
+})
+
+// ─── Service Request ──────────────────────────────────────────────────────────
 
 export const CreateServiceRequestSchema = z.object({
   parentAppointmentId: z.string().uuid(),
-  serviceId: z.string().uuid(),
-  proposedSlot: z.string().datetime({ message: 'Must be a valid ISO datetime' }),
+  serviceId:           z.string().uuid(),
+  proposedSlot:        z.string().datetime({ message: 'Must be a valid ISO datetime' }),
 })
 
 export const RespondServiceRequestSchema = z.object({
   status: z.enum(['accepted', 'rejected']),
 })
 
-// ─── Enums (for reference) ────────────────────────────────────────────────────
+// ─── Enums ────────────────────────────────────────────────────────────────────
 
 export const APPOINTMENT_STATUS = [
-  'pending', // payment nahi hua
-  'confirmed', // payment ho gaya, time nahi aaya
-  'ongoing', // session chal raha hai
-  'completed', // session khatam
-  'cancelled', // cancel hua
+  'pending',    // payment nahi hua
+  'confirmed',  // payment ho gaya
+  'ongoing',    // session chal raha hai
+  'completed',  // session khatam
+  'cancelled',  // cancel hua
 ] as const
 
 export const BUNDLE_STATUS = [
   'in_progress', // koi child session ongoing hai
-  'paused', // saare current complete, future child pending
-  'completed', // sab khatam
+  'paused',      // saare current complete, future child pending
+  'completed',   // sab khatam
 ] as const
 
 export const SERVICE_REQUEST_STATUS = ['pending', 'accepted', 'rejected', 'expired'] as const
-
 export const PAYMENT_STATUS = ['pending', 'success', 'failed'] as const
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type UpsertServiceDto = z.infer<typeof UpsertServiceSchema>
-export type UpdateServiceDto = z.infer<typeof UpdateServiceSchema>
-export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
-export type CreateBookingDto = z.infer<typeof CreateBookingSchema>
-export type CancelAppointmentDto = z.infer<typeof CancelAppointmentSchema>
-export type CreatePaymentOrderDto = z.infer<typeof CreatePaymentOrderSchema>
-export type VerifyPaymentDto = z.infer<typeof VerifyPaymentSchema>
+export type UpsertServiceDto        = z.infer<typeof UpsertServiceSchema>
+export type UpdateServiceDto        = z.infer<typeof UpdateServiceSchema>
+export type CreateAvailabilityDto   = z.infer<typeof CreateAvailabilitySchema>
+export type GetSlotsQueryDto        = z.infer<typeof GetSlotsQuerySchema>
+export type CreateBookingDto        = z.infer<typeof CreateBookingSchema>
+export type CancelAppointmentDto    = z.infer<typeof CancelAppointmentSchema>
+export type CreatePaymentOrderDto   = z.infer<typeof CreatePaymentOrderSchema>
+export type VerifyPaymentDto        = z.infer<typeof VerifyPaymentSchema>
 export type CreateServiceRequestDto = z.infer<typeof CreateServiceRequestSchema>
 export type RespondServiceRequestDto = z.infer<typeof RespondServiceRequestSchema>
-
-export type AppointmentStatus = (typeof APPOINTMENT_STATUS)[number]
-export type BundleStatus = (typeof BUNDLE_STATUS)[number]
-export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUS)[number]
-export type PaymentStatus = (typeof PAYMENT_STATUS)[number]
+export type AppointmentStatus       = (typeof APPOINTMENT_STATUS)[number]
+export type BundleStatus            = (typeof BUNDLE_STATUS)[number]
+export type ServiceRequestStatus    = (typeof SERVICE_REQUEST_STATUS)[number]
+export type PaymentStatus           = (typeof PAYMENT_STATUS)[number]
