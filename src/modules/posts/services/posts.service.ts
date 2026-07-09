@@ -9,8 +9,8 @@ export class PostsService {
 
   constructor(private readonly postsRepository: PostsRepository) {
     this.imagekit = new ImageKit({
-      publicKey:   env.IMAGEKIT_PUBLIC_KEY  ?? '',
-      privateKey:  env.IMAGEKIT_PRIVATE_KEY ?? '',
+      publicKey: env.IMAGEKIT_PUBLIC_KEY ?? '',
+      privateKey: env.IMAGEKIT_PRIVATE_KEY ?? '',
       urlEndpoint: env.IMAGEKIT_URL_ENDPOINT ?? '',
     })
   }
@@ -20,17 +20,30 @@ export class PostsService {
   async createPost(astrologerId: string, dto: CreatePostDto) {
     return this.postsRepository.create({
       astrologerId,
-      content:         dto.content,
-      mediaUrl:        dto.mediaUrl ?? null,
-      mediaType:       dto.mediaType,
+      content: dto.content,
+      mediaUrl: dto.mediaUrl ?? null,
+      mediaType: dto.mediaType,
       linkedServiceId: dto.linkedServiceId ?? null,
+      tags: dto.tags ?? [],
     })
   }
 
-  // ── Get All Posts — feed ───────────────────────────────────────────────────
+  // ── Get All Posts — feed / category detail ─────────────────────────────────
 
-  async getAllPosts(limit: number, offset: number) {
+  async getAllPosts(limit: number, offset: number, astrologerId?: string, tag?: string) {
+    if (astrologerId) {
+      return this.postsRepository.findByAstrologer(astrologerId, limit, offset)
+    }
+    if (tag) {
+      return this.postsRepository.findByTag(tag, limit, offset)
+    }
     return this.postsRepository.findAll(limit, offset)
+  }
+
+  async getPostById(id: string) {
+    const post = await this.postsRepository.findById(id)
+    if (!post) throw NotFoundError('Post not found')
+    return post
   }
 
   // ── Get My Posts — astrologer ──────────────────────────────────────────────

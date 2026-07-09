@@ -32,7 +32,7 @@ export class ServiceRequestService {
 
     // Proposed slot valid hai?
     const proposedDate = new Date(proposedSlot)
-    if (isNaN(proposedDate.getTime())) throw BadRequestError('Invalid proposed slot datetime')
+    if (Number.isNaN(proposedDate.getTime())) throw BadRequestError('Invalid proposed slot datetime')
 
     // Expires in 10 minutes — user ko jaldi decide karna hoga
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000)

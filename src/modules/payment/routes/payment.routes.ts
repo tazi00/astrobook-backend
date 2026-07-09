@@ -79,4 +79,18 @@ export async function paymentRoutes(app: FastifyInstance) {
     },
     paymentController.verifyPayment,
   )
+
+  // GET /payments/transactions
+  app.get(
+    '/payments/transactions',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Payment'],
+        summary: 'Astrologer ke apne received payments (transactions list)',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    paymentController.getMyTransactions,
+  )
 }

@@ -5,7 +5,7 @@ import type { AstrologerService } from '../services/astrologer.service'
 export class AstrologerController {
   constructor(private readonly astrologerService: AstrologerService) {}
 
-  getAll = async (request: FastifyRequest, reply: FastifyReply) => {
+  getAll = async (_request: FastifyRequest, reply: FastifyReply) => {
     const astrologers = await this.astrologerService.getAll()
     return reply.status(200).send({ astrologers })
   }

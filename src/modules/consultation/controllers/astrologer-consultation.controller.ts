@@ -2,9 +2,11 @@ import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { ConsultationService } from '../services/consultation.service'
 import type { BookingService } from '../services/booking.service'
 import {
-  UpsertServiceSchema,
+  CreateServiceSchema,
+  UpdateServiceSchema,
   CreateAvailabilitySchema,
   GetSlotsQuerySchema,
+  BrowseServicesQuerySchema,
 } from '../schemas/consultation.schema'
 
 export class AstrologerConsultationController {
@@ -13,11 +15,20 @@ export class AstrologerConsultationController {
     private readonly bookingService: BookingService,
   ) {}
 
-  // POST /consultation/services
-  upsertService = async (request: FastifyRequest, reply: FastifyReply) => {
+  // POST /consultation/services — astrologer khud ki nayi "normal" service
+  createService = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId: astrologerId } = request.user as { userId: string }
-    const dto = UpsertServiceSchema.parse(request.body)
-    const service = await this.consultationService.upsertService(astrologerId, dto)
+    const dto = CreateServiceSchema.parse(request.body)
+    const service = await this.consultationService.createService(astrologerId, dto)
+    return reply.status(201).send({ success: true, data: { service } })
+  }
+
+  // PATCH /consultation/services/:id — kisi bhi service ka edit (Basic ya normal)
+  updateService = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { userId: astrologerId } = request.user as { userId: string }
+    const { id } = request.params as { id: string }
+    const dto = UpdateServiceSchema.parse(request.body)
+    const service = await this.consultationService.updateService(id, astrologerId, dto)
     return reply.status(200).send({ success: true, data: { service } })
   }
 
@@ -93,5 +104,14 @@ export class UserConsultationController {
     const { id: astrologerId } = request.params as { id: string }
     const dates = await this.consultationService.getAvailableDates(astrologerId)
     return reply.status(200).send({ success: true, data: { dates } })
+  }
+
+  // GET /consultation/services/browse?tag=X&limit=&offset= — Explore category
+  // detail page ke "Consultancies" section (kisi bhi astrologer ki services)
+  browseByTag = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { tag, limit, offset } = BrowseServicesQuerySchema.parse(request.query)
+    const services = await this.consultationService.browseServicesByTag(tag, limit, offset)
+    const hasMore = services.length === limit
+    return reply.status(200).send({ success: true, data: { services, hasMore } })
   }
 }

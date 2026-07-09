@@ -122,4 +122,9 @@ export class PaymentService {
       appointment: confirmed,
     }
   }
+
+  // Astrologer ke apne received payments (transactions tab ke liye)
+  async getAstrologerTransactions(astrologerId: string) {
+    return this.paymentRepository.findByAstrologer(astrologerId)
+  }
 }

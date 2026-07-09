@@ -11,7 +11,7 @@ import {
 // Using clearly reserved UUIDs so test rows are easy to identify in the DB.
 // Must be valid UUID v4 format (hex only, 8-4-4-4-12)
 export const TEST_ASTROLOGER_ID = '00000000-0000-0000-0001-000000000001'
-export const TEST_USER_ID      = '00000000-0000-0000-0001-000000000002'
+export const TEST_USER_ID = '00000000-0000-0000-0001-000000000002'
 
 // ─── Seed ─────────────────────────────────────────────────────────────────────
 
@@ -32,7 +32,6 @@ export async function seedTestUsers() {
     .insert(users)
     .values({
       id: TEST_ASTROLOGER_ID,
-      supabaseId: 'test-supabase-astrologer-seed-001',
       name: '[TEST] Arjun Sharma',
       email: 'test.astrologer@astrobook.test',
       role: 'astrologer',
@@ -46,7 +45,6 @@ export async function seedTestUsers() {
     .insert(users)
     .values({
       id: TEST_USER_ID,
-      supabaseId: 'test-supabase-user-seed-002',
       name: '[TEST] Priya Mehta',
       email: 'test.user@astrobook.test',
       role: 'user',
@@ -79,10 +77,7 @@ export async function getTestAvailability(astrologerId: string) {
 
 export async function getTestAppointments(userId: string) {
   const db = getDb()
-  return db
-    .select()
-    .from(appointments)
-    .where(eq(appointments.userId, userId))
+  return db.select().from(appointments).where(eq(appointments.userId, userId))
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────

@@ -5,10 +5,10 @@ import { UnauthorizedError, ForbiddenError } from '@/core/errors'
  * Middleware to verify JWT access token.
  * Attaches decoded user payload to request.user
  */
-export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
+export async function authenticate(request: FastifyRequest, _reply: FastifyReply) {
   try {
     await request.jwtVerify()
-  } catch (error) {
+  } catch (_error) {
     throw UnauthorizedError('Invalid or expired token')
   }
 }
@@ -18,7 +18,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
  * Usage: { preHandler: [authenticate, requireRole(['admin', 'astrologer'])] }
  */
 export function requireRole(allowedRoles: string[]) {
-  return async (request: FastifyRequest, reply: FastifyReply) => {
+  return async (request: FastifyRequest, _reply: FastifyReply) => {
     const user = request.user as { userId: string; role: string; isOnboarded: boolean }
 
     if (!user || !allowedRoles.includes(user.role)) {
@@ -30,7 +30,7 @@ export function requireRole(allowedRoles: string[]) {
 /**
  * Require user to be onboarded
  */
-export async function requireOnboarded(request: FastifyRequest, reply: FastifyReply) {
+export async function requireOnboarded(request: FastifyRequest, _reply: FastifyReply) {
   const user = request.user as { userId: string; role: string; isOnboarded: boolean }
 
   if (!user?.isOnboarded) {

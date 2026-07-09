@@ -1,31 +1,29 @@
 import { z } from 'zod'
 
-// ─── Service Codes ────────────────────────────────────────────────────────────
-// 101 = Basic, 102 = Standard, 103 = Premium, 104 = Elite
-
-export const SERVICE_CODES = [101, 102, 103, 104] as const
-export type ServiceCode = (typeof SERVICE_CODES)[number]
-
-export const ServiceCodeSchema = z.union([
-  z.literal(101),
-  z.literal(102),
-  z.literal(103),
-  z.literal(104),
-])
-
 // ─── Consultation Service ─────────────────────────────────────────────────────
+// Koi Premium/Elite tier nahi hai — sirf ek auto-created "Basic" consultancy
+// (platform banata hai, koi image nahi) + astrologer ki apni "normal"
+// services (name, price, duration, image, about, tags ke saath).
 
-export const UpsertServiceSchema = z.object({
-  serviceCode:      ServiceCodeSchema,
-  title:            z.string().min(3).max(255),
+// Explore ke categories jaisi hi tags — kam se kam 1, max 5
+export const ServiceTagsSchema = z.array(z.string().min(1)).min(1).max(5)
+
+// Naya "normal" service banate waqt (astrologer khud) — cover image zaroori
+export const CreateServiceSchema = z.object({
+  title: z.string().min(3).max(255),
   shortDescription: z.string().min(10).max(500),
-  coverImage:       z.string().url('Cover image must be a valid URL'),
-  about:            z.string().min(20),
-  durationMinutes:  z.number().int().min(15).max(180),
-  price:            z.number().positive().optional(),
+  coverImage: z.string().url('Cover image must be a valid URL'),
+  about: z.string().min(20),
+  durationMinutes: z.number().int().min(15).max(180),
+  price: z.number().positive().optional(),
+  tags: ServiceTagsSchema,
 })
 
-export const UpdateServiceSchema = UpsertServiceSchema.omit({ serviceCode: true }).partial()
+// Existing service edit karte waqt (Basic ho ya normal) — sab fields optional
+export const UpdateServiceSchema = CreateServiceSchema.partial()
+
+// Backward-compat alias (purane imports ke liye)
+export const UpsertServiceSchema = CreateServiceSchema
 
 // ─── Availability Window ──────────────────────────────────────────────────────
 
@@ -33,10 +31,10 @@ const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 export const CreateAvailabilitySchema = z
   .object({
-    date:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
     startTime: z.string().regex(timeRegex, 'Start time must be HH:MM (24h)'),
-    endTime:   z.string().regex(timeRegex, 'End time must be HH:MM (24h)'),
-    timezone:  z.string().default('Asia/Kolkata'),
+    endTime: z.string().regex(timeRegex, 'End time must be HH:MM (24h)'),
+    timezone: z.string().default('Asia/Kolkata'),
   })
   .refine(
     (d) => {
@@ -59,17 +57,24 @@ export const CreateAvailabilitySchema = z
 
 export const GetSlotsQuerySchema = z.object({
   astrologerId: z.string().uuid(),
-  serviceId:    z.string().uuid(),
-  date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+  serviceId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+})
+
+// Explore category detail page — kisi bhi astrologer ki tag wali services
+export const BrowseServicesQuerySchema = z.object({
+  tag: z.string().min(1),
+  limit: z.coerce.number().min(1).max(50).default(20),
+  offset: z.coerce.number().min(0).default(0),
 })
 
 // ─── Booking ──────────────────────────────────────────────────────────────────
 
 export const CreateBookingSchema = z.object({
   astrologerId: z.string().uuid(),
-  serviceId:    z.string().uuid(),
-  scheduledAt:  z.string().datetime({ message: 'Must be a valid ISO datetime', offset: true }),
-  notes:        z.string().max(500).optional(),
+  serviceId: z.string().uuid(),
+  scheduledAt: z.string().datetime({ message: 'Must be a valid ISO datetime', offset: true }),
+  notes: z.string().max(500).optional(),
 })
 
 // ─── Cancel Appointment ───────────────────────────────────────────────────────
@@ -85,10 +90,10 @@ export const CreatePaymentOrderSchema = z.object({
 })
 
 export const VerifyPaymentSchema = z.object({
-  appointmentId:      z.string().uuid(),
-  razorpayOrderId:    z.string(),
-  razorpayPaymentId:  z.string(),
-  razorpaySignature:  z.string(),
+  appointmentId: z.string().uuid(),
+  razorpayOrderId: z.string(),
+  razorpayPaymentId: z.string(),
+  razorpaySignature: z.string(),
 })
 
 // ─── Session ──────────────────────────────────────────────────────────────────
@@ -101,8 +106,8 @@ export const JoinSessionSchema = z.object({
 
 export const CreateServiceRequestSchema = z.object({
   parentAppointmentId: z.string().uuid(),
-  serviceId:           z.string().uuid(),
-  proposedSlot:        z.string().datetime({ message: 'Must be a valid ISO datetime' }),
+  serviceId: z.string().uuid(),
+  proposedSlot: z.string().datetime({ message: 'Must be a valid ISO datetime' }),
 })
 
 export const RespondServiceRequestSchema = z.object({
@@ -112,17 +117,17 @@ export const RespondServiceRequestSchema = z.object({
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export const APPOINTMENT_STATUS = [
-  'pending',    // payment nahi hua
-  'confirmed',  // payment ho gaya
-  'ongoing',    // session chal raha hai
-  'completed',  // session khatam
-  'cancelled',  // cancel hua
+  'pending', // payment nahi hua
+  'confirmed', // payment ho gaya
+  'ongoing', // session chal raha hai
+  'completed', // session khatam
+  'cancelled', // cancel hua
 ] as const
 
 export const BUNDLE_STATUS = [
   'in_progress', // koi child session ongoing hai
-  'paused',      // saare current complete, future child pending
-  'completed',   // sab khatam
+  'paused', // saare current complete, future child pending
+  'completed', // sab khatam
 ] as const
 
 export const SERVICE_REQUEST_STATUS = ['pending', 'accepted', 'rejected', 'expired'] as const
@@ -130,17 +135,19 @@ export const PAYMENT_STATUS = ['pending', 'success', 'failed'] as const
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type UpsertServiceDto        = z.infer<typeof UpsertServiceSchema>
-export type UpdateServiceDto        = z.infer<typeof UpdateServiceSchema>
-export type CreateAvailabilityDto   = z.infer<typeof CreateAvailabilitySchema>
-export type GetSlotsQueryDto        = z.infer<typeof GetSlotsQuerySchema>
-export type CreateBookingDto        = z.infer<typeof CreateBookingSchema>
-export type CancelAppointmentDto    = z.infer<typeof CancelAppointmentSchema>
-export type CreatePaymentOrderDto   = z.infer<typeof CreatePaymentOrderSchema>
-export type VerifyPaymentDto        = z.infer<typeof VerifyPaymentSchema>
+export type CreateServiceDto = z.infer<typeof CreateServiceSchema>
+export type UpsertServiceDto = z.infer<typeof CreateServiceSchema>
+export type UpdateServiceDto = z.infer<typeof UpdateServiceSchema>
+export type CreateAvailabilityDto = z.infer<typeof CreateAvailabilitySchema>
+export type GetSlotsQueryDto = z.infer<typeof GetSlotsQuerySchema>
+export type BrowseServicesQueryDto = z.infer<typeof BrowseServicesQuerySchema>
+export type CreateBookingDto = z.infer<typeof CreateBookingSchema>
+export type CancelAppointmentDto = z.infer<typeof CancelAppointmentSchema>
+export type CreatePaymentOrderDto = z.infer<typeof CreatePaymentOrderSchema>
+export type VerifyPaymentDto = z.infer<typeof VerifyPaymentSchema>
 export type CreateServiceRequestDto = z.infer<typeof CreateServiceRequestSchema>
 export type RespondServiceRequestDto = z.infer<typeof RespondServiceRequestSchema>
-export type AppointmentStatus       = (typeof APPOINTMENT_STATUS)[number]
-export type BundleStatus            = (typeof BUNDLE_STATUS)[number]
-export type ServiceRequestStatus    = (typeof SERVICE_REQUEST_STATUS)[number]
-export type PaymentStatus           = (typeof PAYMENT_STATUS)[number]
+export type AppointmentStatus = (typeof APPOINTMENT_STATUS)[number]
+export type BundleStatus = (typeof BUNDLE_STATUS)[number]
+export type ServiceRequestStatus = (typeof SERVICE_REQUEST_STATUS)[number]
+export type PaymentStatus = (typeof PAYMENT_STATUS)[number]

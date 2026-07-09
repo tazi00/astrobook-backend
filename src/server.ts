@@ -1,13 +1,32 @@
 import { buildApp } from './app'
 import { env } from './config/env'
-import { closeDb } from './core/database/client'
+import { closeDb, getDb } from './core/database/client'
+import { AppointmentRepository } from './modules/consultation/repositories/appointment.repository'
 
 async function start() {
   const app = await buildApp()
 
+  // ── Auto-timeout background sweep ─────────────────────────────────────────
+  // 'ongoing' sessions jinka scheduled time nikal chuka hai, unhe safety net
+  // ke taur pe har minute check karke 'completed' kar do — is se independent
+  // hai ki koi request aayi ya nahi (jaise agar dono log app hi band kar dein
+  // aur kabhi wapas na aayein)
+  const appointmentRepo = new AppointmentRepository(getDb())
+  const timeoutSweepInterval = setInterval(async () => {
+    try {
+      const completed = await appointmentRepo.completeTimedOutSessions()
+      if (completed.length > 0) {
+        app.log.info({ count: completed.length }, 'Auto-completed timed-out sessions')
+      }
+    } catch (err) {
+      app.log.error(err, 'Session auto-timeout sweep failed')
+    }
+  }, 60 * 1000)
+
   // Graceful shutdown
   const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}. Shutting down gracefully...`)
+    clearInterval(timeoutSweepInterval)
 
     try {
       await app.close()

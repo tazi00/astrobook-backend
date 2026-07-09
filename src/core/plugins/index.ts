@@ -44,18 +44,20 @@ export async function registerPlugins(app: FastifyInstance) {
   })
 
   // JWT - Refresh Token with custom methods
-  app.decorate('jwtRefreshSign', function (payload: object, options: object) {
-    // @ts-ignore
+  // NOTE: @fastify/jwt ka sign()/verify() sirf (payload, options, callback)
+  // accept karta hai — kisi bhi tarah ka teesra positional secret argument
+  // nahi. Alag secret use karne ke liye options mein `key` property honi
+  // chahiye (property ka naam `secret` NAHI hai — woh silently ignore ho
+  // jaata, aur refresh token galti se access-secret se verify ho sakta tha)
+  app.decorate('jwtRefreshSign', function (payload: object, options: object = {}) {
     return app.jwt.sign(
       { ...payload },
-      { ...options, expiresIn: env.JWT_REFRESH_EXPIRES_IN },
-      env.JWT_REFRESH_SECRET,
+      { ...options, expiresIn: env.JWT_REFRESH_EXPIRES_IN, key: env.JWT_REFRESH_SECRET },
     )
   })
 
   app.decorate('jwtRefreshVerify', function (token: string) {
-    // @ts-ignore
-    return app.jwt.verify(token, { secret: env.JWT_REFRESH_SECRET })
+    return app.jwt.verify(token, { key: env.JWT_REFRESH_SECRET })
   })
 
   // Utilities

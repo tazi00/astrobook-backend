@@ -1,7 +1,10 @@
-import { eq, and, gte, lte, or, sql, inArray, lt, gt } from 'drizzle-orm'
+import { eq, and, gte, lte, or, sql, inArray, lt, gt, desc } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import type { Database } from '@/core/database/client'
 import { appointments, consultationServices, users } from '@/core/database/schema'
 import type { NewAppointment } from '@/core/database/schema'
+
+const clientUsers = alias(users, 'client_users')
 
 export class AppointmentRepository {
   constructor(private readonly db: Database) {}
@@ -51,19 +54,24 @@ export class AppointmentRepository {
         createdAt: appointments.createdAt,
         service: {
           id: consultationServices.id,
-          serviceCode: consultationServices.serviceCode,
+          isBasic: consultationServices.isBasic,
           title: consultationServices.title,
           coverImage: consultationServices.coverImage,
           durationMinutes: consultationServices.durationMinutes,
           price: consultationServices.price,
         },
         astrologerName: users.name,
+        // Astrologer-side session list ke liye client ka naam bhi chahiye
+        // (pehle sirf astrologerName tha — astrologer khud ka naam dekhta,
+        // useless tha unke liye)
+        userName: clientUsers.name,
         astrologerId: appointments.astrologerId,
         userId: appointments.userId,
       })
       .from(appointments)
       .innerJoin(consultationServices, eq(appointments.serviceId, consultationServices.id))
       .innerJoin(users, eq(appointments.astrologerId, users.id))
+      .innerJoin(clientUsers, eq(appointments.userId, clientUsers.id))
   }
 
   // Grouped: upcoming / ongoing / completed / cancelled
@@ -107,6 +115,17 @@ export class AppointmentRepository {
         ),
       )
       .orderBy(sql`${appointments.scheduledAt} ASC`)
+  }
+
+  // ── Auto-timeout ─────────────────────────────────────────────────────────
+  // 'ongoing' sessions jinka scheduled time nikal chuka hai — end call kisi
+  // ne na dabaya ho tab bhi yeh safety net unhe 'completed' kar deta hai
+  async completeTimedOutSessions() {
+    return this.db
+      .update(appointments)
+      .set({ status: 'completed', updatedAt: sql`now()` })
+      .where(and(eq(appointments.status, 'ongoing'), lt(appointments.endsAt, sql`now()`)))
+      .returning({ id: appointments.id })
   }
 
   async update(

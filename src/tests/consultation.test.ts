@@ -13,7 +13,7 @@
  * Data written to DB (visible after run)
  * ───────────────────────────────────────
  *   users               — [TEST] Arjun Sharma (astrologer) + [TEST] Priya Mehta (user)
- *   consultation_services — services 101, 102, 103, 104 for test astrologer
+ *   consultation_services — 2 normal services (no tiers) for test astrologer
  *   availability_windows  — one upcoming window (30 days from now, 17:00–20:00 IST)
  *   appointments          — one confirmed booking + one cancelled booking
  */
@@ -53,9 +53,10 @@ let userToken: string
 // IDs created during the test run — stored so later tests can reference them
 let service101Id = ''
 let service102Id = ''
-let availabilityId = ''       // window created in availability tests
-let confirmedApptId = ''      // appointment created in booking test
-let cancelledApptId = ''      // second appointment, cancelled in cancel test
+let availabilityId = '' // window created in availability tests
+let secondAvailabilityId = '' // second same-day window (multi-slot test)
+let confirmedApptId = '' // appointment created in booking test
+let cancelledApptId = '' // second appointment, cancelled in cancel test
 
 // The date all booking-related tests use (30 days from now)
 const AVAILABILITY_DATE = futureDateStr(30)
@@ -94,13 +95,12 @@ afterAll(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Astrologer – Services', () => {
-  test('POST /consultation/services → creates service 101 (Kundli Reading)', async () => {
+  test('POST /consultation/services → creates a normal service (Kundli Reading)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 101,
         title: 'Kundli Reading',
         shortDescription: 'Detailed analysis of your birth chart and planetary positions.',
         coverImage: 'https://cdn.astrobook.test/services/kundli.jpg',
@@ -108,28 +108,28 @@ describe('Astrologer – Services', () => {
           'Get a comprehensive Kundli reading that covers your life path, career, relationships, and spiritual journey based on Vedic astrology.',
         durationMinutes: 45,
         price: 799,
-        meta: { category: 'vedic', popular: true },
+        tags: ['vedic-astrology', 'kundli'],
       },
     })
 
-    expect(res.statusCode).toBe(200)
+    expect(res.statusCode).toBe(201)
     const body = res.json()
-    expect(body.service.serviceCode).toBe(101)
+    expect(body.service.isBasic).toBe(false)
     expect(body.service.title).toBe('Kundli Reading')
     expect(body.service.durationMinutes).toBe(45)
+    expect(body.service.tags).toEqual(['vedic-astrology', 'kundli'])
     expect(body.service.astrologerId).toBe(TEST_ASTROLOGER_ID)
 
     service101Id = body.service.id
-    console.log(`   ✔ service 101 id: ${service101Id}`)
+    console.log(`   ✔ service 1 id: ${service101Id}`)
   })
 
-  test('POST /consultation/services → creates service 102 (Tarot Reading)', async () => {
+  test('POST /consultation/services → creates a second normal service (Tarot Reading)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 102,
         title: 'Tarot Reading',
         shortDescription: 'Intuitive tarot card reading for clarity and guidance.',
         coverImage: 'https://cdn.astrobook.test/services/tarot.jpg',
@@ -137,84 +137,49 @@ describe('Astrologer – Services', () => {
           'A 30-minute tarot session focused on your current situation and the energies influencing your path ahead.',
         durationMinutes: 30,
         price: 499,
+        tags: ['tarot'],
       },
     })
 
-    expect(res.statusCode).toBe(200)
+    expect(res.statusCode).toBe(201)
     const body = res.json()
-    expect(body.service.serviceCode).toBe(102)
+    expect(body.service.tags).toEqual(['tarot'])
     service102Id = body.service.id
-    console.log(`   ✔ service 102 id: ${service102Id}`)
+    console.log(`   ✔ service 2 id: ${service102Id}`)
   })
 
-  test('POST /consultation/services → creates service 103 (Numerology)', async () => {
+  test('PATCH /consultation/services/:id → updates title/price of an existing service', async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/consultation/services',
+      method: 'PATCH',
+      url: `/api/v1/consultation/services/${service101Id}`,
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 103,
-        title: 'Numerology Session',
-        shortDescription: 'Discover the hidden meaning behind your name and birth numbers.',
-        coverImage: 'https://cdn.astrobook.test/services/numerology.jpg',
-        about:
-          'Using your full birth name and date of birth, we decode your life path number, destiny number, and personal year to guide your decisions.',
-        durationMinutes: 30,
-        price: 399,
-      },
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json().service.serviceCode).toBe(103)
-  })
-
-  test('POST /consultation/services → creates service 104 (Vastu Consultation)', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/consultation/services',
-      headers: { authorization: `Bearer ${astrologerToken}` },
-      payload: {
-        serviceCode: 104,
-        title: 'Vastu Consultation',
-        shortDescription: 'Align your living or work space with positive energies.',
-        coverImage: 'https://cdn.astrobook.test/services/vastu.jpg',
-        about:
-          'A thorough Vastu Shastra consultation for your home or office. Share your floor plan and we will identify energy blocks and suggest remedies.',
-        durationMinutes: 60,
-        price: 1199,
-      },
-    })
-
-    expect(res.statusCode).toBe(200)
-    expect(res.json().service.serviceCode).toBe(104)
-  })
-
-  test('POST /consultation/services → upserts (updates) service 101 title', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/consultation/services',
-      headers: { authorization: `Bearer ${astrologerToken}` },
-      payload: {
-        serviceCode: 101,
         title: 'Kundli Reading (Premium)',
-        shortDescription: 'In-depth Vedic birth chart analysis with remedies.',
-        coverImage: 'https://cdn.astrobook.test/services/kundli.jpg',
-        about:
-          'A premium Kundli session covering your birth chart, Dasha periods, and personalised remedies to improve your fortune.',
-        durationMinutes: 60,
         price: 999,
+        durationMinutes: 60,
       },
     })
 
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    // Same ID, updated title
+    // Same ID, updated fields only
     expect(body.service.id).toBe(service101Id)
     expect(body.service.title).toBe('Kundli Reading (Premium)')
     expect(body.service.durationMinutes).toBe(60)
+    // Untouched fields remain
+    expect(body.service.tags).toEqual(['vedic-astrology', 'kundli'])
   })
 
-  test('GET /consultation/services/mine → returns all 4 services', async () => {
+  test("PATCH /consultation/services/:id → 403 when updating another astrologer's service", async () => {
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/consultation/services/${service101Id}`,
+      headers: { authorization: `Bearer ${userToken}` }, // wrong role entirely
+    })
+    expect(res.statusCode).toBe(403)
+  })
+
+  test('GET /consultation/services/mine → returns both created services', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/consultation/services/mine',
@@ -223,13 +188,13 @@ describe('Astrologer – Services', () => {
 
     expect(res.statusCode).toBe(200)
     const body = res.json()
-    expect(body.services).toHaveLength(4)
-    const codes = body.services.map((s: any) => s.serviceCode).sort()
-    expect(codes).toEqual([101, 102, 103, 104])
+    expect(body.services).toHaveLength(2)
+    const ids = body.services.map((s: any) => s.id).sort()
+    expect(ids).toEqual([service101Id, service102Id].sort())
 
-    // Verify DB also has 4 rows
+    // Verify DB also has 2 rows
     const dbServices = await getTestServices(TEST_ASTROLOGER_ID)
-    expect(dbServices).toHaveLength(4)
+    expect(dbServices).toHaveLength(2)
   })
 
   test('POST /consultation/services → 403 for a regular user (wrong role)', async () => {
@@ -238,12 +203,12 @@ describe('Astrologer – Services', () => {
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${userToken}` },
       payload: {
-        serviceCode: 101,
         title: 'Attempt by user',
         shortDescription: 'This should be rejected.',
         coverImage: 'https://cdn.astrobook.test/x.jpg',
         about: 'Should never reach the database because of role guard.',
         durationMinutes: 30,
+        tags: ['tarot'],
       },
     })
 
@@ -256,12 +221,12 @@ describe('Astrologer – Services', () => {
       method: 'POST',
       url: '/api/v1/consultation/services',
       payload: {
-        serviceCode: 101,
         title: 'No auth',
         shortDescription: 'x'.repeat(10),
         coverImage: 'https://cdn.astrobook.test/x.jpg',
         about: 'x'.repeat(20),
         durationMinutes: 30,
+        tags: ['tarot'],
       },
     })
 
@@ -274,8 +239,7 @@ describe('Astrologer – Services', () => {
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 101,
-        // title, shortDescription, coverImage, about, durationMinutes missing
+        // title, shortDescription, coverImage, about, durationMinutes, tags missing
       },
     })
 
@@ -284,18 +248,18 @@ describe('Astrologer – Services', () => {
     expect(res.json().error).toBe('BAD_REQUEST')
   })
 
-  test('POST /consultation/services → 400 for invalid service code (105)', async () => {
+  test('POST /consultation/services → 400 when tags is empty', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 105, // not in enum [101,102,103,104]
-        title: 'Bad code',
+        title: 'No tags',
         shortDescription: 'x'.repeat(10),
         coverImage: 'https://cdn.astrobook.test/x.jpg',
         about: 'x'.repeat(20),
         durationMinutes: 30,
+        tags: [], // must have at least 1
       },
     })
 
@@ -308,16 +272,49 @@ describe('Astrologer – Services', () => {
       url: '/api/v1/consultation/services',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
-        serviceCode: 101,
         title: 'Short session',
         shortDescription: 'x'.repeat(10),
         coverImage: 'https://cdn.astrobook.test/x.jpg',
         about: 'x'.repeat(20),
         durationMinutes: 5, // below minimum: 15
+        tags: ['tarot'],
       },
     })
 
     expect(res.statusCode).toBe(400)
+  })
+
+  test('DELETE /consultation/services/:id → deactivates a normal service', async () => {
+    // Create a throwaway service to delete (keep service101/102 intact for booking tests)
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/consultation/services',
+      headers: { authorization: `Bearer ${astrologerToken}` },
+      payload: {
+        title: 'Temp service',
+        shortDescription: 'x'.repeat(10),
+        coverImage: 'https://cdn.astrobook.test/x.jpg',
+        about: 'x'.repeat(20),
+        durationMinutes: 30,
+        tags: ['tarot'],
+      },
+    })
+    const tempId = createRes.json().service.id
+
+    const deleteRes = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/consultation/services/${tempId}`,
+      headers: { authorization: `Bearer ${astrologerToken}` },
+    })
+    expect(deleteRes.statusCode).toBe(200)
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/consultation/services/mine',
+      headers: { authorization: `Bearer ${astrologerToken}` },
+    })
+    const ids = listRes.json().services.map((s: any) => s.id)
+    expect(ids).not.toContain(tempId)
   })
 })
 
@@ -351,24 +348,66 @@ describe('Astrologer – Availability', () => {
     console.log(`   ✔ availability id: ${availabilityId}  date: ${AVAILABILITY_DATE}`)
   })
 
-  test('POST /consultation/availability → upserts (updates) window when same date is submitted again', async () => {
+  test('POST /consultation/availability → different time on same date creates a SEPARATE window (multi-slot support)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/consultation/availability',
       headers: { authorization: `Bearer ${astrologerToken}` },
       payload: {
         date: AVAILABILITY_DATE,
-        startTime: '18:00', // updated start time
-        endTime: '21:00',
+        startTime: '21:00', // a second, non-overlapping window same day
+        endTime: '22:00',
         timezone: 'Asia/Kolkata',
       },
     })
 
     expect(res.statusCode).toBe(201)
     const body = res.json()
-    // Same row updated in place (same ID, new start time)
+    // Different time range → NEW row, not an overwrite of the first window
+    expect(body.availability.id).not.toBe(availabilityId)
+    expect(body.availability.date).toBe(AVAILABILITY_DATE)
+    expect(body.availability.startTime).toMatch(/^21:00/)
+
+    secondAvailabilityId = body.availability.id
+
+    // Both windows should now be visible for that astrologer
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/consultation/availability/mine',
+      headers: { authorization: `Bearer ${astrologerToken}` },
+    })
+    const ids = listRes.json().availability.map((w: any) => w.id)
+    expect(ids).toContain(availabilityId)
+    expect(ids).toContain(secondAvailabilityId)
+  })
+
+  test('POST /consultation/availability → resubmitting the EXACT same date+time is idempotent (same id, reactivated)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/consultation/availability',
+      headers: { authorization: `Bearer ${astrologerToken}` },
+      payload: {
+        date: AVAILABILITY_DATE,
+        startTime: '17:00', // exact same as the first window
+        endTime: '20:00',
+        timezone: 'Asia/Kolkata',
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    const body = res.json()
+    // Same row reactivated in place (same ID) — no duplicate created
     expect(body.availability.id).toBe(availabilityId)
-    expect(body.availability.startTime).toMatch(/^18:00/)
+    expect(body.availability.startTime).toMatch(/^17:00/)
+  })
+
+  test('DELETE /consultation/availability/:id → clean up the second window (keep single-window state for booking tests below)', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/consultation/availability/${secondAvailabilityId}`,
+      headers: { authorization: `Bearer ${astrologerToken}` },
+    })
+    expect(res.statusCode).toBe(204)
   })
 
   test('GET /consultation/availability/mine → returns upcoming windows', async () => {
@@ -765,11 +804,17 @@ describe('DB state after test run', () => {
 
     console.log('\n📊 Rows written to DB by this test run:')
     console.log(`   consultation_services   : ${services.length} rows`)
-    console.log(`   availability_windows    : ${availability.filter((w) => w.isActive).length} active row(s)`)
-    console.log(`   appointments (confirmed): ${appts.filter((a) => a.status === 'confirmed').length}`)
-    console.log(`   appointments (cancelled): ${appts.filter((a) => a.status === 'cancelled').length}`)
+    console.log(
+      `   availability_windows    : ${availability.filter((w) => w.isActive).length} active row(s)`,
+    )
+    console.log(
+      `   appointments (confirmed): ${appts.filter((a) => a.status === 'confirmed').length}`,
+    )
+    console.log(
+      `   appointments (cancelled): ${appts.filter((a) => a.status === 'cancelled').length}`,
+    )
 
-    expect(services).toHaveLength(4)
+    expect(services).toHaveLength(3)
     expect(availability.filter((w) => w.isActive).length).toBeGreaterThanOrEqual(1)
     expect(appts.filter((a) => a.status === 'confirmed')).toHaveLength(1)
     expect(appts.filter((a) => a.status === 'cancelled')).toHaveLength(1)

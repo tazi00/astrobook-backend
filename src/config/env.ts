@@ -36,13 +36,15 @@ const envSchema = z.object({
   // Session
   MAX_SESSIONS_PER_USER: z.coerce.number().default(3),
 
-  // Agora
-  AGORA_APP_ID: z.string().optional(),
-  AGORA_APP_CERTIFICATE: z.string().optional(),
+  // Agora — Razorpay ki tarah yeh bhi ab core feature (video calls) ke liye
+  // zaroori hai, isliye optional() hata diya — .env mein missing hone par ab
+  // server boot hi nahi hoga (fail-fast), silently undefined nahi jayega
+  AGORA_APP_ID: z.string().min(1, 'AGORA_APP_ID is required'),
+  AGORA_APP_CERTIFICATE: z.string().min(1, 'AGORA_APP_CERTIFICATE is required'),
 
   // Razorpay
-  RAZORPAY_KEY_ID: z.string().optional(),
-  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_KEY_ID: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
+  RAZORPAY_KEY_SECRET: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
 })
 
 const parsed = envSchema.safeParse(process.env)

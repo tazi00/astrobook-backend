@@ -56,14 +56,15 @@ export class AuthController {
       success: true,
       data: {
         user: {
-          id:          currentUser.id,
-          phone:       currentUser.phone,
-          email:       currentUser.email,
-          name:        currentUser.name,
-          role:        currentUser.role,
+          id: currentUser.id,
+          phone: currentUser.phone,
+          email: currentUser.email,
+          name: currentUser.name,
+          role: currentUser.role,
           isOnboarded: currentUser.isOnboarded,
-        }
-      }
+          isAstrologer: currentUser.isAstrologer,
+        },
+      },
     })
   }
 }

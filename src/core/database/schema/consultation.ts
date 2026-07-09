@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   pgTable,
   uuid,
@@ -42,29 +43,35 @@ export const serviceRequestStatusEnum = pgEnum('service_request_status', [
 
 // ─── Consultation Services ───────────────────────────────────────────────────
 
-export const consultationServices = pgTable(
-  'consultation_services',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    astrologerId: uuid('astrologer_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    serviceCode: smallint('service_code').notNull(),
-    title: varchar('title', { length: 255 }).notNull(),
-    shortDescription: varchar('short_description', { length: 500 }).notNull(),
-    coverImage: text('cover_image').notNull(),
-    about: text('about').notNull(),
-    durationMinutes: smallint('duration_minutes').notNull(),
-    price: numeric('price', { precision: 10, scale: 2 }),
-    isActive: boolean('is_active').notNull().default(true),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-    meta: jsonb('meta').$type<any>(),
-  },
-  (t) => ({
-    uniqueAstrologerService: unique().on(t.astrologerId, t.serviceCode),
-  }),
-)
+export const consultationServices = pgTable('consultation_services', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  astrologerId: uuid('astrologer_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  // Platform har naye astrologer ke liye ek Basic consultancy auto-create
+  // karta hai (upgradeToAstrologer flow mein) — isBasic=true, koi image
+  // nahi, fixed starter price/duration jo astrologer baad mein edit kar
+  // sakta hai. Baaki saari services astrologer khud banata hai ("normal"),
+  // koi Premium/Elite tier nahi hai ab.
+  isBasic: boolean('is_basic').notNull().default(false),
+  title: varchar('title', { length: 255 }).notNull(),
+  shortDescription: varchar('short_description', { length: 500 }).notNull(),
+  // Basic consultancy ke liye null (koi photo nahi) — astrologer-created
+  // "normal" services ke liye required hai (zod schema level pe enforce).
+  coverImage: text('cover_image'),
+  about: text('about').notNull(),
+  durationMinutes: smallint('duration_minutes').notNull(),
+  price: numeric('price', { precision: 10, scale: 2 }),
+  // Explore ke categories wale hi tags (e.g. "vedic-astrology", "tarot")
+  tags: text('tags')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  meta: jsonb('meta').$type<any>(),
+})
 
 // ─── Availability Windows ────────────────────────────────────────────────────
 
@@ -85,7 +92,10 @@ export const availabilityWindows = pgTable(
     meta: jsonb('meta').$type<any>(),
   },
   (t) => ({
-    uniqueAstrologerDate: unique().on(t.astrologerId, t.date),
+    // Ek astrologer same date pe multiple time windows rakh sakta hai
+    // (11-1pm, 3-5pm, 8-10pm) — sirf EXACT duplicate (same date+start+end)
+    // dobara submit hone par overwrite/reactivate hoga.
+    uniqueAstrologerDateTime: unique().on(t.astrologerId, t.date, t.startTime, t.endTime),
   }),
 )
 

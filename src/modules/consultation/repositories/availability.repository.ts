@@ -22,9 +22,10 @@ export class AvailabilityRepository {
   }
 
   /**
-   * Insert or update the window for a given (astrologer, date) pair.
-   * Uses the unique constraint as the conflict target so re-submitting the
-   * same date simply overwrites the time range and reactivates the window.
+   * Insert or update a window for a given (astrologer, date, startTime, endTime).
+   * Ek astrologer same date pe multiple ALAG time windows rakh sakta hai —
+   * sirf EXACT same date+start+end dobara submit hone par overwrite/reactivate
+   * hota hai (idempotent resubmission), naya time range nayi row banati hai.
    */
   async upsert(astrologerId: string, dto: CreateAvailabilityDto) {
     const [window] = await this.db
@@ -38,10 +39,13 @@ export class AvailabilityRepository {
         isActive: true,
       })
       .onConflictDoUpdate({
-        target: [availabilityWindows.astrologerId, availabilityWindows.date],
+        target: [
+          availabilityWindows.astrologerId,
+          availabilityWindows.date,
+          availabilityWindows.startTime,
+          availabilityWindows.endTime,
+        ],
         set: {
-          startTime: sql`excluded.start_time`,
-          endTime: sql`excluded.end_time`,
           timezone: sql`excluded.timezone`,
           isActive: true,
           updatedAt: sql`now()`,
@@ -60,8 +64,9 @@ export class AvailabilityRepository {
     return window ?? null
   }
 
-  async findByDate(astrologerId: string, date: string) {
-    const [window] = await this.db
+  // Ek date ke saare active windows (multiple ho sakte hain)
+  async findAllByDate(astrologerId: string, date: string) {
+    return this.db
       .select()
       .from(availabilityWindows)
       .where(
@@ -71,8 +76,7 @@ export class AvailabilityRepository {
           eq(availabilityWindows.isActive, true),
         ),
       )
-      .limit(1)
-    return window ?? null
+      .orderBy(availabilityWindows.startTime)
   }
 
   // Returns all upcoming active availability dates for a given astrologer
@@ -96,10 +100,7 @@ export class AvailabilityRepository {
       .update(availabilityWindows)
       .set({ isActive: false, updatedAt: sql`now()` })
       .where(
-        and(
-          eq(availabilityWindows.id, id),
-          eq(availabilityWindows.astrologerId, astrologerId),
-        ),
+        and(eq(availabilityWindows.id, id), eq(availabilityWindows.astrologerId, astrologerId)),
       )
       .returning()
     return window ?? null

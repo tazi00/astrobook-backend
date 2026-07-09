@@ -3,7 +3,8 @@ import type { ServiceRepository } from '../repositories/service.repository'
 import type { AvailabilityRepository } from '../repositories/availability.repository'
 import type { AppointmentRepository } from '../repositories/appointment.repository'
 import type {
-  UpsertServiceDto,
+  CreateServiceDto,
+  UpdateServiceDto,
   CreateAvailabilityDto,
 } from '../schemas/consultation.schema'
 
@@ -18,15 +19,24 @@ function toUtcTimestamp(dateStr: string, timeStr: string, timezone: string): Dat
 
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
-    year: 'numeric', month: 'numeric', day: 'numeric',
-    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
   })
 
   const parts = Object.fromEntries(fmt.formatToParts(wrongUtcDate).map((p) => [p.type, p.value]))
   const localHour = Number(parts['hour']) === 24 ? 0 : Number(parts['hour'])
   const wrongLocalMs = Date.UTC(
-    Number(parts['year']), Number(parts['month']) - 1, Number(parts['day']),
-    localHour, Number(parts['minute']), Number(parts['second']),
+    Number(parts['year']),
+    Number(parts['month']) - 1,
+    Number(parts['day']),
+    localHour,
+    Number(parts['minute']),
+    Number(parts['second']),
   )
 
   const offsetMs = wrongLocalMs - wrongUtcMs
@@ -34,8 +44,8 @@ function toUtcTimestamp(dateStr: string, timeStr: string, timezone: string): Dat
 }
 
 export type TimeSlot = {
-  startTime: string  // ISO string
-  endTime: string    // ISO string
+  startTime: string // ISO string
+  endTime: string // ISO string
   available: boolean
 }
 
@@ -50,18 +60,35 @@ export class ConsultationService {
 
   // ── Astrologer: Services ───────────────────────────────────────────────────
 
-  async upsertService(astrologerId: string, dto: UpsertServiceDto) {
-    return this.serviceRepository.upsert(astrologerId, dto)
+  async createService(astrologerId: string, dto: CreateServiceDto) {
+    return this.serviceRepository.create(astrologerId, dto)
+  }
+
+  async updateService(serviceId: string, astrologerId: string, dto: UpdateServiceDto) {
+    const service = await this.serviceRepository.findById(serviceId)
+    if (!service) throw NotFoundError('Service not found')
+    if (service.astrologerId !== astrologerId) throw ForbiddenError('Not your service')
+    return this.serviceRepository.update(serviceId, astrologerId, dto)
   }
 
   async getMyServices(astrologerId: string) {
     return this.serviceRepository.findByAstrologer(astrologerId)
   }
 
+  // Explore category detail page — kisi bhi astrologer ki us tag wali services
+  async browseServicesByTag(tag: string, limit: number, offset: number) {
+    return this.serviceRepository.findByTag(tag, limit, offset)
+  }
+
   async deactivateService(serviceId: string, astrologerId: string) {
     const service = await this.serviceRepository.findById(serviceId)
     if (!service) throw NotFoundError('Service not found')
     if (service.astrologerId !== astrologerId) throw ForbiddenError('Not your service')
+    if (service.isBasic) {
+      throw BadRequestError(
+        'Basic consultation cannot be deleted — you can only edit its price and duration',
+      )
+    }
     return this.serviceRepository.deactivate(serviceId, astrologerId)
   }
 
@@ -103,20 +130,25 @@ export class ConsultationService {
 
   async getAvailableDates(astrologerId: string): Promise<string[]> {
     const windows = await this.availabilityRepository.findUpcomingByAstrologer(astrologerId)
-    return windows.map((w) => w.date)
+    // Ek din ke multiple windows ho sakte hain (11-1pm, 3-5pm, 8-10pm) —
+    // isliye Set se unique dates nikalo, warna same date UI mein double dikhta hai
+    const uniqueDates = Array.from(new Set(windows.map((w) => w.date)))
+    return uniqueDates
   }
 
   async getAvailabilityForDate(astrologerId: string, date: string) {
-    return this.availabilityRepository.findByDate(astrologerId, date)
+    return this.availabilityRepository.findAllByDate(astrologerId, date)
   }
 
   // ── User: Available Slots (MAIN FUNCTION) ─────────────────────────────────
   //
   // Algorithm:
-  //   1. Fetch availability window for the date
+  //   1. Fetch ALL availability windows for the date (astrologer ke multiple
+  //      time ranges ho sakte hain — e.g. 11-1pm, 3-5pm, 8-10pm)
   //   2. Get all confirmed/ongoing appointments for that astrologer that day
-  //   3. Generate slots of durationMinutes within the window
+  //   3. Har window ke andar slots of durationMinutes generate karo
   //   4. Mark slots as unavailable if they overlap with existing bookings
+  //   5. Saare windows ke slots merge + chronologically sort karke return karo
 
   async getAvailableSlots(
     astrologerId: string,
@@ -128,52 +160,61 @@ export class ConsultationService {
     if (!service) throw NotFoundError('Service not found')
     if (!service.isActive) throw BadRequestError('Service is not active')
 
-    // Availability window fetch karo
-    const window = await this.availabilityRepository.findByDate(astrologerId, date)
-    if (!window) return [] // Koi availability nahi
+    // Us din ke saare availability windows fetch karo
+    const windows = await this.availabilityRepository.findAllByDate(astrologerId, date)
+    if (windows.length === 0) return [] // Koi availability nahi
 
-    const windowStart = toUtcTimestamp(window.date, window.startTime, window.timezone)
-    const windowEnd   = toUtcTimestamp(window.date, window.endTime, window.timezone)
-    const durationMs  = service.durationMinutes * 60 * 1000
+    const durationMs = service.durationMinutes * 60 * 1000
 
-    // Window duration check — service fit hogi?
-    const windowDurationMs = windowEnd.getTime() - windowStart.getTime()
-    if (windowDurationMs < durationMs) return []
-
-    // Existing bookings fetch karo
+    // Existing bookings — poore din ke liye ek hi baar fetch karo (sabse
+    // pehli window ke start se sabse aakhri window ke end tak cover karega)
+    const dayStart = toUtcTimestamp(date, '00:00', windows[0]!.timezone)
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
     const existingBookings = await this.appointmentRepository.findConfirmedByAstrologerInRange(
       astrologerId,
-      windowStart,
-      windowEnd,
+      dayStart,
+      dayEnd,
     )
 
-    // Slots generate karo
     const slots: TimeSlot[] = []
-    let current = new Date(windowStart)
 
-    while (current.getTime() + durationMs <= windowEnd.getTime()) {
-      const slotStart = new Date(current)
-      const slotEnd   = new Date(current.getTime() + durationMs)
+    for (const window of windows) {
+      const windowStart = toUtcTimestamp(window.date, window.startTime, window.timezone)
+      const windowEnd = toUtcTimestamp(window.date, window.endTime, window.timezone)
 
-      // Existing bookings se overlap check karo
-      const isBooked = existingBookings.some((booking) => {
-        const bookingStart = new Date(booking.scheduledAt)
-        const bookingEnd   = new Date(booking.endsAt)
-        return slotStart < bookingEnd && slotEnd > bookingStart
-      })
+      // Window duration check — service fit hogi?
+      const windowDurationMs = windowEnd.getTime() - windowStart.getTime()
+      if (windowDurationMs < durationMs) continue
 
-      // Past slots available nahi honge
-      const isPast = slotStart < new Date()
+      let current = new Date(windowStart)
 
-      slots.push({
-        startTime: slotStart.toISOString(),
-        endTime:   slotEnd.toISOString(),
-        available: !isBooked && !isPast,
-      })
+      while (current.getTime() + durationMs <= windowEnd.getTime()) {
+        const slotStart = new Date(current)
+        const slotEnd = new Date(current.getTime() + durationMs)
 
-      // Next slot
-      current = slotEnd
+        // Existing bookings se overlap check karo
+        const isBooked = existingBookings.some((booking) => {
+          const bookingStart = new Date(booking.scheduledAt)
+          const bookingEnd = new Date(booking.endsAt)
+          return slotStart < bookingEnd && slotEnd > bookingStart
+        })
+
+        // Past slots available nahi honge
+        const isPast = slotStart < new Date()
+
+        slots.push({
+          startTime: slotStart.toISOString(),
+          endTime: slotEnd.toISOString(),
+          available: !isBooked && !isPast,
+        })
+
+        // Next slot
+        current = slotEnd
+      }
     }
+
+    // Chronologically sort karo (alag windows se aaye slots mixed ho sakte hain)
+    slots.sort((a, b) => a.startTime.localeCompare(b.startTime))
 
     return slots
   }

@@ -1,9 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { PostsService } from '../services/posts.service'
-import {
-  CreatePostSchema,
-  GetPostsQuerySchema,
-} from '../schemas/posts.schema'
+import { CreatePostSchema, GetPostsQuerySchema } from '../schemas/posts.schema'
 
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
@@ -16,11 +13,20 @@ export class PostsController {
     return reply.status(201).send({ success: true, data: { post } })
   }
 
-  // GET /posts — sabke posts (feed)
+  // GET /posts — sabke posts (feed), ya ?astrologerId=X / ?tag=X se filtered
   getAll = async (request: FastifyRequest, reply: FastifyReply) => {
-    const { limit, offset } = GetPostsQuerySchema.parse(request.query)
-    const posts = await this.postsService.getAllPosts(limit, offset)
-    return reply.send({ success: true, data: { posts } })
+    const { limit, offset, astrologerId, tag } = GetPostsQuerySchema.parse(request.query)
+    const posts = await this.postsService.getAllPosts(limit, offset, astrologerId, tag)
+    // Infinite scroll ke liye: agar poore `limit` jitne posts mile, aur pages ho sakte hain
+    const hasMore = posts.length === limit
+    return reply.send({ success: true, data: { posts, hasMore } })
+  }
+
+  // GET /posts/:id — single post detail (public)
+  getById = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const post = await this.postsService.getPostById(id)
+    return reply.send({ success: true, data: { post } })
   }
 
   // GET /posts/my — apne posts
@@ -40,7 +46,7 @@ export class PostsController {
   }
 
   // GET /posts/upload-token — ImageKit signed token
-  getUploadToken = async (request: FastifyRequest, reply: FastifyReply) => {
+  getUploadToken = async (_request: FastifyRequest, reply: FastifyReply) => {
     const token = this.postsService.getImageKitAuthToken()
     return reply.send({ success: true, data: token })
   }

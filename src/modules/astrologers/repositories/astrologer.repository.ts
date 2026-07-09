@@ -1,5 +1,5 @@
 // src/modules/astrologers/repositories/astrologer.repository.ts
-import { eq, and, gte } from 'drizzle-orm'
+import { eq, and, gte, desc } from 'drizzle-orm'
 import type { Database } from '@/core/database/client'
 import { users, consultationServices, availabilityWindows } from '@/core/database/schema'
 
@@ -29,7 +29,7 @@ export class AstrologerRepository {
           eq(consultationServices.isActive, true),
         ),
       )
-      .orderBy(consultationServices.serviceCode)
+      .orderBy(desc(consultationServices.isBasic), consultationServices.createdAt)
   }
 
   async findSlots(astrologerId: string) {

@@ -23,4 +23,11 @@ export class PaymentController {
     const result = await this.paymentService.verifyPayment(userId, dto)
     return reply.status(200).send(result)
   }
+
+  // GET /payments/transactions — astrologer ke apne received payments
+  getMyTransactions = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { userId } = request.user as { userId: string }
+    const transactions = await this.paymentService.getAstrologerTransactions(userId)
+    return reply.status(200).send({ success: true, data: { transactions } })
+  }
 }
