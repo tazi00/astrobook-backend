@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { env } from '@/config/env'
 import { BadRequestError, NotFoundError, ForbiddenError } from '@/core/errors'
 import { AgoraService } from '@/modules/consultation/services/agora.service'
+import type { PushNotificationService } from '@/core/services/push-notification.service'
 import type { PaymentRepository } from '../repositories/payment.repositary'
 import type { AppointmentRepository } from '@/modules/consultation/repositories/appointment.repository'
 import type {
@@ -21,6 +22,7 @@ export class PaymentService {
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly appointmentRepository: AppointmentRepository,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   // Step 1: Create Razorpay order
@@ -97,6 +99,11 @@ export class PaymentService {
         razorpayPaymentId,
         razorpaySignature,
       })
+      this.pushNotificationService.sendToUser(userId, {
+        title: 'Payment Nahi Hua',
+        body: 'Tumhara payment complete nahi ho paya',
+        data: { type: 'payment_failed', appointmentId },
+      })
       throw BadRequestError('Payment verification failed — invalid signature')
     }
 
@@ -104,7 +111,7 @@ export class PaymentService {
     const { channel, token } = this.agoraService.generateToken(appointmentId)
 
     // Update payment record
-    await this.paymentRepository.updateByOrderId(razorpayOrderId, {
+    const updatedPayment = await this.paymentRepository.updateByOrderId(razorpayOrderId, {
       status: 'success',
       razorpayPaymentId,
       razorpaySignature,
@@ -115,6 +122,18 @@ export class PaymentService {
       status: 'confirmed',
       agoraChannel: channel,
       agoraToken: token,
+    })
+
+    // Dono taraf notify karo
+    this.pushNotificationService.sendToUser(appointment.userId, {
+      title: 'Booking Confirmed!',
+      body: 'Tumhari booking confirm ho gayi hai',
+      data: { type: 'booking_confirmed', appointmentId },
+    })
+    this.pushNotificationService.sendToUser(appointment.astrologerId, {
+      title: 'Naya Booking Mila',
+      body: `₹${updatedPayment?.amount ?? ''} ka payment mila — naya booking confirm ho gaya`,
+      data: { type: 'new_booking', appointmentId },
     })
 
     return {

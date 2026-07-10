@@ -11,6 +11,7 @@ import { ConsultationService } from '../services/consultation.service'
 import { BookingService } from '../services/booking.service'
 import { ServiceRequestService } from '../services/service-request.service'
 import { AgoraService } from '../services/agora.service'
+import { PushNotificationService } from '@/core/services/push-notification.service'
 
 import {
   AstrologerConsultationController,
@@ -30,12 +31,18 @@ export async function consultationRoutes(app: FastifyInstance) {
 
   // ─── Services ────────────────────────────────────────────────────────────
   const agoraService = new AgoraService()
+  const pushNotificationService = new PushNotificationService(db)
   const consultationService = new ConsultationService(
     serviceRepo,
     availabilityRepo,
     appointmentRepo,
   )
-  const bookingService = new BookingService(appointmentRepo, consultationService, agoraService)
+  const bookingService = new BookingService(
+    appointmentRepo,
+    consultationService,
+    agoraService,
+    pushNotificationService,
+  )
   const serviceRequestService = new ServiceRequestService(serviceRequestRepo, appointmentRepo)
 
   // ─── Controllers ─────────────────────────────────────────────────────────

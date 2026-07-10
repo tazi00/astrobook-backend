@@ -3,6 +3,7 @@ import { getDb } from '@/core/database/client'
 import { UserRepository } from '../repositories/user.repository'
 import { UserService } from '../services/user.service'
 import { UserController } from '../controllers/user.controller'
+import { PushNotificationService } from '@/core/services/push-notification.service'
 import { authenticate } from '@/modules/auth'
 import { INTEREST_OPTIONS } from '../schemas/user.schema'
 
@@ -11,9 +12,32 @@ export async function userRoutes(app: FastifyInstance) {
   const db = getDb()
   const userRepository = new UserRepository(db)
   const userService = new UserService(userRepository)
-  const userController = new UserController(userService)
+  const pushNotificationService = new PushNotificationService(db)
+  const userController = new UserController(userService, pushNotificationService)
 
   const prefix = '/users'
+
+  // POST /users/me/push-token
+  app.post(
+    `${prefix}/me/push-token`,
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Users'],
+        summary: 'Register Expo push token for this device',
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['expoPushToken'],
+          properties: {
+            expoPushToken: { type: 'string' },
+            platform: { type: 'string', enum: ['ios', 'android'] },
+          },
+        },
+      },
+    },
+    userController.registerPushToken,
+  )
 
   // POST /users/onboarding
   app.post(

@@ -1,5 +1,11 @@
 import { z } from 'zod'
 
+export const RegisterPushTokenSchema = z.object({
+  expoPushToken: z.string().min(1),
+  platform: z.enum(['ios', 'android']).optional(),
+})
+export type RegisterPushTokenDto = z.infer<typeof RegisterPushTokenSchema>
+
 export const OnboardingSchema = z.object({
   name:        z.string().min(2).max(255),
   email:       z.string().email().optional(),

@@ -2,6 +2,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '@/core/errors'
 import type { AppointmentRepository } from '../repositories/appointment.repository'
 import type { ConsultationService } from './consultation.service'
 import type { AgoraService } from './agora.service'
+import type { PushNotificationService } from '@/core/services/push-notification.service'
 import type { CreateBookingDto } from '../schemas/consultation.schema'
 import type { Appointment } from '@/core/database/schema'
 
@@ -45,6 +46,7 @@ export class BookingService {
     private readonly appointmentRepository: AppointmentRepository,
     private readonly consultationService: ConsultationService,
     private readonly agoraService: AgoraService,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   // ── Initiate Booking (pending — payment abhi baki) ────────────────────────
@@ -153,6 +155,15 @@ export class BookingService {
         agoraChannel: channel,
         agoraToken: token,
       })
+
+      // Doosri party ko batao ki session shuru ho chuka hai, wait ho raha hai
+      const otherPartyId =
+        requesterId === appointment.userId ? appointment.astrologerId : appointment.userId
+      this.pushNotificationService.sendToUser(otherPartyId, {
+        title: 'Session Shuru Ho Gaya',
+        body: 'Doosri party tumhara wait kar rahi hai — session join karo',
+        data: { type: 'session_waiting', appointmentId },
+      })
     }
 
     return {
@@ -217,6 +228,16 @@ export class BookingService {
     if (appointment.status === 'ongoing') throw BadRequestError('Cannot cancel an ongoing session')
 
     const updated = await this.appointmentRepository.update(appointmentId, { status: 'cancelled' })
+
+    // Jo party cancel nahi kar rahi, usko batao — requester ko khud pata hai
+    const otherPartyId =
+      requesterId === appointment.userId ? appointment.astrologerId : appointment.userId
+    this.pushNotificationService.sendToUser(otherPartyId, {
+      title: 'Booking Cancelled',
+      body: 'Tumhari ek booking cancel ho gayi hai',
+      data: { type: 'booking_cancelled', appointmentId },
+    })
+
     return updated!
   }
 

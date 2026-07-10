@@ -11,6 +11,7 @@ import { PaymentRepository } from '@/modules/payment/repositories/payment.reposi
 import { ConsultationService } from '@/modules/consultation/services/consultation.service'
 import { BookingService } from '@/modules/consultation/services/booking.service'
 import { AgoraService } from '@/modules/consultation/services/agora.service'
+import { PushNotificationService } from '@/core/services/push-notification.service'
 import { CartService } from '../services/cart.service'
 
 import { CartController } from '../controllers/cart.controller'
@@ -25,8 +26,14 @@ export async function cartRoutes(app: FastifyInstance) {
   const paymentRepo = new PaymentRepository(db)
 
   const agoraService = new AgoraService()
+  const pushNotificationService = new PushNotificationService(db)
   const consultationService = new ConsultationService(serviceRepo, availabilityRepo, appointmentRepo)
-  const bookingService = new BookingService(appointmentRepo, consultationService, agoraService)
+  const bookingService = new BookingService(
+    appointmentRepo,
+    consultationService,
+    agoraService,
+    pushNotificationService,
+  )
 
   const cartService = new CartService(
     cartRepo,
@@ -35,6 +42,7 @@ export async function cartRoutes(app: FastifyInstance) {
     appointmentRepo,
     bookingService,
     agoraService,
+    pushNotificationService,
   )
   const cartController = new CartController(cartService)
 

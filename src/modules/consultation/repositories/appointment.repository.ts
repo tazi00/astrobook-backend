@@ -128,6 +128,29 @@ export class AppointmentRepository {
       .returning({ id: appointments.id })
   }
 
+  // "Session starting soon" push reminder ke liye — jo confirmed appointments
+  // agle 10 min mein shuru honge aur jinhe abhi tak reminder nahi bheja gaya
+  async findUpcomingNeedingReminder() {
+    return this.db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.status, 'confirmed'),
+          sql`${appointments.reminderSentAt} IS NULL`,
+          gt(appointments.scheduledAt, sql`now()`),
+          lt(appointments.scheduledAt, sql`now() + interval '10 minutes'`),
+        ),
+      )
+  }
+
+  async markReminderSent(id: string) {
+    await this.db
+      .update(appointments)
+      .set({ reminderSentAt: sql`now()` })
+      .where(eq(appointments.id, id))
+  }
+
   async update(
     id: string,
     data: Partial<{

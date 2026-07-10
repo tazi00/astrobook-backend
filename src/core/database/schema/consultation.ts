@@ -124,6 +124,9 @@ export const appointments = pgTable('appointments', {
   // Agora — only populated after payment
   agoraChannel: text('agora_channel'),
   agoraToken: text('agora_token'),
+  // "Session starting soon" push reminder duplicate na bheje isliye —
+  // ek baar bhej diya toh yahan timestamp set ho jaata hai
+  reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
 
   status: appointmentStatusEnum('status').notNull().default('pending'),
   notes: text('notes'),

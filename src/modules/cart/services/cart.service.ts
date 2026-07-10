@@ -8,6 +8,7 @@ import type { PaymentRepository } from '@/modules/payment/repositories/payment.r
 import type { AppointmentRepository } from '@/modules/consultation/repositories/appointment.repository'
 import type { BookingService } from '@/modules/consultation/services/booking.service'
 import type { AgoraService } from '@/modules/consultation/services/agora.service'
+import type { PushNotificationService } from '@/core/services/push-notification.service'
 import type { AddCartItemDto, CartCheckoutVerifyDto } from '../schemas/cart.schema'
 
 const razorpay = new Razorpay({
@@ -23,6 +24,7 @@ export class CartService {
     private readonly appointmentRepository: AppointmentRepository,
     private readonly bookingService: BookingService,
     private readonly agoraService: AgoraService,
+    private readonly pushNotificationService: PushNotificationService,
   ) {}
 
   // ── Add / List / Remove ────────────────────────────────────────────────────
@@ -158,6 +160,11 @@ export class CartService {
         razorpayPaymentId,
         razorpaySignature,
       })
+      this.pushNotificationService.sendToUser(userId, {
+        title: 'Payment Nahi Hua',
+        body: 'Tumhara payment complete nahi ho paya',
+        data: { type: 'payment_failed' },
+      })
       throw BadRequestError('Payment verification failed — invalid signature')
     }
 
@@ -179,6 +186,18 @@ export class CartService {
         agoraToken: token,
       })
       ownedAppointments.push(confirmed)
+
+      // Dono taraf notify karo — user ko confirm, astrologer ko naya booking + payment
+      this.pushNotificationService.sendToUser(appointment.userId, {
+        title: 'Booking Confirmed!',
+        body: 'Tumhari booking confirm ho gayi hai',
+        data: { type: 'booking_confirmed', appointmentId: appointment.id },
+      })
+      this.pushNotificationService.sendToUser(appointment.astrologerId, {
+        title: 'Naya Booking Mila',
+        body: `₹${row.amount} ka payment mila — naya booking confirm ho gaya`,
+        data: { type: 'new_booking', appointmentId: appointment.id },
+      })
     }
 
     return {

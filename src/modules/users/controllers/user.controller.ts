@@ -1,9 +1,21 @@
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import type { UserService } from '../services/user.service'
-import { OnboardingSchema, UpdateProfileSchema } from '../schemas/user.schema'
+import type { PushNotificationService } from '@/core/services/push-notification.service'
+import { OnboardingSchema, UpdateProfileSchema, RegisterPushTokenSchema } from '../schemas/user.schema'
 
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly pushNotificationService: PushNotificationService,
+  ) {}
+
+  // POST /users/me/push-token
+  registerPushToken = async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.user as { userId: string }
+    const dto = RegisterPushTokenSchema.parse(request.body)
+    await this.pushNotificationService.registerToken(user.userId, dto.expoPushToken, dto.platform)
+    return reply.status(200).send({ success: true })
+  }
 
   /**
    * POST /users/onboarding

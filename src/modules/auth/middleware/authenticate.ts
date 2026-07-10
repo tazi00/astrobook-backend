@@ -14,6 +14,20 @@ export async function authenticate(request: FastifyRequest, _reply: FastifyReply
 }
 
 /**
+ * Public routes ke liye jahan login optional hai, lekin agar token diya
+ * gaya ho toh request.user populate ho jaaye (jaise: feed mein isLikedByMe
+ * dikhane ke liye). Invalid/missing token pe REJECT nahi karta, bas
+ * request.user undefined chhod deta hai.
+ */
+export async function optionalAuthenticate(request: FastifyRequest, _reply: FastifyReply) {
+  try {
+    await request.jwtVerify()
+  } catch (_error) {
+    // Token nahi diya ya invalid hai — koi baat nahi, guest ke taur pe continue karo
+  }
+}
+
+/**
  * Role-based access control
  * Usage: { preHandler: [authenticate, requireRole(['admin', 'astrologer'])] }
  */
