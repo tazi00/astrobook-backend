@@ -1,4 +1,5 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '@/core/errors'
+import { PENDING_BOOKING_TIMEOUT_MS } from '@/core/utils/cron-heartbeat'
 import type { AppointmentRepository } from '../repositories/appointment.repository'
 import type { ConsultationService } from './consultation.service'
 import type { AgoraService } from './agora.service'
@@ -334,6 +335,29 @@ export class BookingService {
     })
 
     return updated!
+  }
+
+  // ── Stale pending booking cleanup (cron-triggered, no requester) ──────────
+  // Payment kabhi shuru hi nahi hui ya beech mein chhod di gayi, aur itni der
+  // ho gayi ki ab genuine slow-payment nahi maani ja sakti. Cancel karke slot
+  // wapas release karo, aur agar order create ho chuka tha to us payment row
+  // ko bhi 'failed' mark karo (clean bookkeeping).
+  async cancelStalePendingBookings(): Promise<number> {
+    const cutoff = new Date(Date.now() - PENDING_BOOKING_TIMEOUT_MS)
+    const stale = await this.appointmentRepository.findStalePending(cutoff)
+
+    for (const appointment of stale) {
+      await this.appointmentRepository.update(appointment.id, { status: 'cancelled' })
+      await this.paymentRepository.markFailedByAppointmentId(appointment.id)
+
+      this.pushNotificationService.sendToUser(appointment.userId, {
+        title: 'Booking Expire Ho Gayi',
+        body: 'Payment complete na hone ki wajah se tumhari pending booking cancel ho gayi hai — dobara book kar sakte ho',
+        data: { type: 'booking_expired', appointmentId: appointment.id },
+      })
+    }
+
+    return stale.length
   }
 
   // ── Astrologer Schedule ────────────────────────────────────────────────────

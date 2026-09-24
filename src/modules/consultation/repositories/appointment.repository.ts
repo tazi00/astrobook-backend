@@ -23,6 +23,29 @@ export class AppointmentRepository {
     return appointment ?? null
   }
 
+  // Abandoned bookings — 'pending' status mein hi reh gaye (payment kabhi
+  // attempt hi nahi hui, ya beech mein chhod di) aur ab bahut purani ho chuki
+  // hain. Ye slot hamesha ke liye lock kar dete the jab tak koi cleanup na
+  // ho — is query se unhe cutoff se compare karke dhoondte hain.
+  async findStalePending(cutoff: Date) {
+    return this.db
+      .select()
+      .from(appointments)
+      .where(and(eq(appointments.status, 'pending'), lt(appointments.createdAt, cutoff)))
+  }
+
+  // Missed sessions — payment ho chuka, booking 'confirmed' thi, lekin
+  // status kabhi 'ongoing' nahi bana (matlab astrologer kabhi join hi nahi
+  // kiya — sirf astrologer ka join hi status ko ongoing banata hai, user ka
+  // akela join karna nahi). Scheduled end (+grace period) nikal chuka hai
+  // aur abhi bhi 'confirmed' hai — ye astrologer no-show hai, refund due hai.
+  async findMissedConfirmed(cutoff: Date) {
+    return this.db
+      .select()
+      .from(appointments)
+      .where(and(eq(appointments.status, 'confirmed'), lt(appointments.endsAt, cutoff)))
+  }
+
   // Conflict check — confirmed + ongoing appointments in a time range
   async findConfirmedByAstrologerInRange(astrologerId: string, rangeStart: Date, rangeEnd: Date) {
     return this.db
@@ -184,7 +207,7 @@ export class AppointmentRepository {
   async update(
     id: string,
     data: Partial<{
-      status: 'pending' | 'confirmed' | 'ongoing' | 'completed' | 'cancelled'
+      status: 'pending' | 'confirmed' | 'ongoing' | 'completed' | 'cancelled' | 'missed'
       bundleStatus: 'in_progress' | 'paused' | 'completed'
       agoraChannel: string
       agoraToken: string
