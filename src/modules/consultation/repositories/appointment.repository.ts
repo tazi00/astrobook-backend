@@ -107,6 +107,11 @@ export class AppointmentRepository {
   }
 
   // Grouped: upcoming / ongoing / completed / cancelled
+  // 'missed' status wale appointments 'cancelled' bucket mein fold kiye
+  // gaye hain — warna woh kisi bhi group mein nahi aate the aur My Bookings
+  // se silently gayab ho jaate the (refund ho jaane ke baad bhi user ko
+  // record kahin nahi dikhta tha). Frontend (STATUS_STYLES.missed) already
+  // isse "Missed — Refunded" ke alag label/color se render karta hai.
   async findMineGrouped(userId: string) {
     const rows = await this.baseDetailQuery(this.db)
       .where(or(eq(appointments.userId, userId), eq(appointments.astrologerId, userId)))
@@ -116,7 +121,7 @@ export class AppointmentRepository {
       upcoming: rows.filter((r) => r.status === 'confirmed' || r.status === 'pending'),
       ongoing: rows.filter((r) => r.status === 'ongoing'),
       completed: rows.filter((r) => r.status === 'completed'),
-      cancelled: rows.filter((r) => r.status === 'cancelled'),
+      cancelled: rows.filter((r) => r.status === 'cancelled' || r.status === 'missed'),
     }
   }
 
