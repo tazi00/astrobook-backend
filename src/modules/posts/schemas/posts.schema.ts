@@ -15,6 +15,19 @@ export const CreatePostSchema = z.object({
   tags: z.array(z.string().min(1)).max(5).default([]),
 })
 
+// Post edit — media (photo/video) badalna allowed nahi (Instagram jaisa),
+// sirf caption, categories aur TEXT post ke colours. Kam-se-kam ek field zaroori.
+export const UpdatePostSchema = z
+  .object({
+    content: z.string().min(1, 'Content required').max(2000).optional(),
+    tags: z.array(z.string().min(1)).max(5).optional(),
+    bgColor: z.string().regex(HEX_COLOR).optional(),
+    textColor: z.string().regex(HEX_COLOR).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Kuch to badlo',
+  })
+
 export const CreateCommentSchema = z.object({
   content: z.string().min(1, 'Comment khaali nahi ho sakta').max(500),
 })
@@ -26,6 +39,15 @@ export const GetPostsQuerySchema = z.object({
   tag: z.string().optional(),
 })
 
+export const GetRelatedQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(12).default(3),
+})
+
+export const PostIdParamSchema = z.object({
+  id: z.string().uuid(),
+})
+
 export type CreatePostDto = z.infer<typeof CreatePostSchema>
+export type UpdatePostDto = z.infer<typeof UpdatePostSchema>
 export type CreateCommentDto = z.infer<typeof CreateCommentSchema>
 export type GetPostsQueryDto = z.infer<typeof GetPostsQuerySchema>

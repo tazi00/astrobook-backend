@@ -2,7 +2,7 @@ import ImageKit from 'imagekit'
 import { env } from '@/config/env'
 import { BadRequestError, ForbiddenError, NotFoundError } from '@/core/errors'
 import type { PostsRepository } from '../repositories/posts.repository'
-import type { CreatePostDto, CreateCommentDto } from '../schemas/posts.schema'
+import type { CreatePostDto, CreateCommentDto, UpdatePostDto } from '../schemas/posts.schema'
 import type { UserRepository } from '@/modules/users/repositories/user.repository'
 import type { FollowsRepository } from '@/modules/follows/repositories/follows.repository'
 import type { NotificationsService } from '@/modules/notifications/services/notifications.service'
@@ -90,10 +90,42 @@ export class PostsService {
     return post
   }
 
+  // ── Related posts — post detail ke neeche ──────────────────────────────────
+
+  async getRelatedPosts(postId: string, limit: number, viewerId?: string) {
+    const post = await this.postsRepository.findById(postId)
+    if (!post) throw NotFoundError('Post not found')
+    return this.postsRepository.findRelated(
+      postId,
+      post.tags ?? [],
+      post.astrologerId,
+      limit,
+      viewerId,
+    )
+  }
+
   // ── Get My Posts — astrologer ──────────────────────────────────────────────
 
   async getMyPosts(astrologerId: string, limit: number, offset: number) {
     return this.postsRepository.findByAstrologer(astrologerId, limit, offset, astrologerId)
+  }
+
+  // ── Edit Post — sirf apna; media nahi badalta ───────────────────────────────
+
+  async updatePost(postId: string, userId: string, dto: UpdatePostDto) {
+    const post = await this.postsRepository.findById(postId)
+    if (!post) throw NotFoundError('Post not found')
+    if (post.astrologerId !== userId) throw ForbiddenError('Tumhara post nahi hai')
+
+    const isText = post.mediaType === 'TEXT'
+    await this.postsRepository.update(postId, {
+      content: dto.content,
+      tags: dto.tags,
+      // Colours sirf TEXT post par maayne rakhte hain
+      bgColor: isText ? dto.bgColor : undefined,
+      textColor: isText ? dto.textColor : undefined,
+    })
+    return this.postsRepository.findById(postId, userId)
   }
 
   // ── Delete Post ────────────────────────────────────────────────────────────

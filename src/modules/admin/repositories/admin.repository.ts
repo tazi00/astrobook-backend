@@ -139,6 +139,7 @@ export class AdminRepository {
       verificationStatus: astrologerProfiles.verificationStatus,
       document1Url: astrologerProfiles.document1Url,
       document2Url: astrologerProfiles.document2Url,
+      videoUrl: astrologerProfiles.videoUrl,
       rejectionReason: astrologerProfiles.rejectionReason,
       verifiedAt: astrologerProfiles.verifiedAt,
       // commissionPercentage sits in users.meta (jsonb), not its own column —

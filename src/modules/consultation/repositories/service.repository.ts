@@ -241,6 +241,24 @@ export class ServiceRepository {
     return variant ?? null
   }
 
+  // Safety net: kisi service ke paas variants na hon (variant system se pehle
+  // ki purani service, DB restore/naya DB, ya kisi script se bani row) to 5
+  // default variants bana do. Idempotent — unique(service_id, duration)
+  // conflict par chup-chaap skip, to parallel requests bhi safe hain.
+  async ensureVariants(serviceId: string) {
+    await this.db
+      .insert(consultationServiceVariants)
+      .values(
+        VARIANT_DURATIONS.map((duration) => ({
+          serviceId,
+          durationMinutes: duration,
+          price: VARIANT_DEFAULT_PRICES[duration],
+          isDefault: duration === DEFAULT_VARIANT_DURATION,
+        })),
+      )
+      .onConflictDoNothing()
+  }
+
   // Astrologer sirf price edit kar sakta hai — duration fixed hai
   async updateVariantPrice(variantId: string, price: number) {
     const [variant] = await this.db

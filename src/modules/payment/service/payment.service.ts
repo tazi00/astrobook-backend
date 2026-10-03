@@ -1,6 +1,7 @@
 import Razorpay from 'razorpay'
 import crypto from 'crypto'
 import { env } from '@/config/env'
+import { toRazorpayAppError } from '@/core/utils/razorpay-error'
 import { BadRequestError, NotFoundError, ForbiddenError } from '@/core/errors'
 import { MISSED_SESSION_GRACE_MS } from '@/core/utils/cron-heartbeat'
 import { AgoraService } from '@/modules/consultation/services/agora.service'
@@ -98,15 +99,19 @@ export class PaymentService {
     if (!amount || amount <= 0) throw BadRequestError('Invalid service price')
 
     // Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // paise mein
-      currency: 'INR',
-      receipt: `appt_${appointmentId.slice(0, 8)}`,
-      notes: {
-        appointmentId,
-        userId,
-      },
-    })
+    const order = await razorpay.orders
+      .create({
+        amount: Math.round(amount * 100), // paise mein
+        currency: 'INR',
+        receipt: `appt_${appointmentId.slice(0, 8)}`,
+        notes: {
+          appointmentId,
+          userId,
+        },
+      })
+      .catch((err: unknown) => {
+        throw toRazorpayAppError(err)
+      })
 
     // Save payment record as pending — denormalize userId/astrologerId for admin reconciliation
     const payment = await this.paymentRepository.create({

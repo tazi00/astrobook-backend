@@ -57,6 +57,18 @@ export async function postsRoutes(app: FastifyInstance) {
     },
   }, postsController.create)
 
+  // GET /posts/:id/related — same category ke posts (public, optional auth)
+  app.get('/posts/:id/related', {
+    preHandler: [optionalAuthenticate],
+    schema: {
+      tags: ['Posts'],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+      },
+    },
+  }, postsController.getRelated)
+
   // GET /posts/:id — single post detail (public, optional auth)
   // NOTE: yeh route pehle missing thi — controller method exist karta tha
   // lekin kabhi register hi nahi hua tha, isliye post detail page mock data
@@ -71,6 +83,15 @@ export async function postsRoutes(app: FastifyInstance) {
       },
     },
   }, postsController.getById)
+
+  // PATCH /posts/:id — authenticated, sirf post ka owner
+  app.patch('/posts/:id', {
+    preHandler: [authenticate],
+    schema: {
+      tags: ['Posts'],
+      params: { type: 'object', properties: { id: { type: 'string' } } },
+    },
+  }, postsController.update)
 
   // DELETE /posts/:id — authenticated
   app.delete('/posts/:id', {

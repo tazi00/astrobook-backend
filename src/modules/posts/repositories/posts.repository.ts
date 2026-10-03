@@ -1,4 +1,4 @@
-import { eq, desc, asc, sql, and, or, inArray, getTableColumns } from 'drizzle-orm'
+import { eq, desc, sql, and, or, inArray, getTableColumns } from 'drizzle-orm'
 import type { Database } from '@/core/database/client'
 import { posts, postLikes, postComments, users, consultationServices, follows } from '@/core/database/schema'
 import type { NewPost, NewPostComment } from '@/core/database/schema/posts'
@@ -114,6 +114,39 @@ export class PostsRepository {
     return this.findAll(limit, offset, { tag }, viewerId)
   }
 
+  // Post detail ke "aur posts" — isi post ki category (tags overlap) wale
+  // pehle, phir usi astrologer ke baaki posts se bharte hain. Ek hi query:
+  // overlap wale upar (CASE), uske baad latest first. Khud ka post exclude.
+  async findRelated(
+    postId: string,
+    tags: string[],
+    astrologerId: string,
+    limit = 3,
+    viewerId?: string,
+  ) {
+    const hasTags = tags.length > 0
+    const tagsArray = hasTags
+      ? sql.join(
+          tags.map((t) => sql`${t}`),
+          sql`, `,
+        )
+      : null
+    const overlap = tagsArray ? sql`${posts.tags} && ARRAY[${tagsArray}]::text[]` : sql`false`
+
+    return this.db
+      .select(this.statsSelect(viewerId))
+      .from(posts)
+      .innerJoin(users, eq(posts.astrologerId, users.id))
+      .where(
+        and(
+          sql`${posts.id} <> ${postId}`,
+          or(overlap, eq(posts.astrologerId, astrologerId)),
+        ),
+      )
+      .orderBy(sql`CASE WHEN ${overlap} THEN 0 ELSE 1 END`, desc(posts.createdAt))
+      .limit(limit)
+  }
+
   async findById(id: string, viewerId?: string) {
     const [post] = await this.db
       .select(this.statsSelect(viewerId))
@@ -122,6 +155,13 @@ export class PostsRepository {
       .where(eq(posts.id, id))
       .limit(1)
     return post ?? null
+  }
+
+  async update(id: string, patch: Partial<Pick<NewPost, 'content' | 'tags' | 'bgColor' | 'textColor'>>) {
+    await this.db
+      .update(posts)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(posts.id, id))
   }
 
   async delete(id: string) {
@@ -167,6 +207,7 @@ export class PostsRepository {
         content: postComments.content,
         createdAt: postComments.createdAt,
         userName: users.name,
+        userAvatar: users.avatarUrl,
       })
       .from(postComments)
       .innerJoin(users, eq(postComments.userId, users.id))
@@ -186,11 +227,12 @@ export class PostsRepository {
         content: postComments.content,
         createdAt: postComments.createdAt,
         userName: users.name,
+        userAvatar: users.avatarUrl,
       })
       .from(postComments)
       .innerJoin(users, eq(postComments.userId, users.id))
       .where(eq(postComments.postId, postId))
-      .orderBy(asc(postComments.createdAt)) // chronological — jaisa WhatsApp/Instagram comments
+      .orderBy(desc(postComments.createdAt)) // newest first — pagination ke saath naya comment upar dikhta hai
       .limit(limit)
       .offset(offset)
   }

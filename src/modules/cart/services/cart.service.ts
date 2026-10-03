@@ -12,6 +12,7 @@ import type { AppointmentRepository } from '@/modules/consultation/repositories/
 import type { BookingService } from '@/modules/consultation/services/booking.service'
 import type { AgoraService } from '@/modules/consultation/services/agora.service'
 import type { PushNotificationService } from '@/core/services/push-notification.service'
+import { toRazorpayAppError } from '@/core/utils/razorpay-error'
 import type { AddCartItemDto, CartCheckoutVerifyDto } from '../schemas/cart.schema'
 
 const razorpay = new Razorpay({
@@ -171,12 +172,16 @@ export class CartService {
     const totalAmount = appointments.reduce((sum, a) => sum + a.price, 0)
     if (totalAmount <= 0) throw BadRequestError('Invalid total amount')
 
-    const order = await razorpay.orders.create({
-      amount: Math.round(totalAmount * 100),
-      currency: 'INR',
-      receipt: `cart_${userId.slice(0, 8)}_${Date.now()}`,
-      notes: { userId, itemCount: String(appointments.length) },
-    })
+    const order = await razorpay.orders
+      .create({
+        amount: Math.round(totalAmount * 100),
+        currency: 'INR',
+        receipt: `cart_${userId.slice(0, 8)}_${Date.now()}`,
+        notes: { userId, itemCount: String(appointments.length) },
+      })
+      .catch((err: unknown) => {
+        throw toRazorpayAppError(err)
+      })
 
     // Har appointment ke liye ek payment row — sab same razorpayOrderId share karte hain
     for (const { appointment, price } of appointments) {

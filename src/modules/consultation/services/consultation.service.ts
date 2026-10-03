@@ -91,6 +91,10 @@ export class ConsultationService {
   async getServiceVariants(serviceId: string) {
     const service = await this.serviceRepository.findById(serviceId)
     if (!service) throw NotFoundError('Service not found')
+    const variants = await this.serviceRepository.findVariantsByService(serviceId)
+    if (variants.length > 0) return variants
+    // Bina variants wali purani service — self-heal
+    await this.serviceRepository.ensureVariants(serviceId)
     return this.serviceRepository.findVariantsByService(serviceId)
   }
 
@@ -133,7 +137,12 @@ export class ConsultationService {
   }
 
   async getDefaultVariant(serviceId: string) {
-    const variant = await this.serviceRepository.findDefaultVariant(serviceId)
+    let variant = await this.serviceRepository.findDefaultVariant(serviceId)
+    if (!variant) {
+      // Bina variants wali purani service — self-heal, phir dobara try
+      await this.serviceRepository.ensureVariants(serviceId)
+      variant = await this.serviceRepository.findDefaultVariant(serviceId)
+    }
     if (!variant) throw NotFoundError('Default variant not found for this service')
     return variant
   }
@@ -237,7 +246,7 @@ export class ConsultationService {
     // Duration variant se aati hai — koi variant na diya ho toh default (30-min)
     const variant = variantId
       ? await this.serviceRepository.findVariantById(variantId)
-      : await this.serviceRepository.findDefaultVariant(serviceId)
+      : await this.getDefaultVariant(serviceId)
     if (!variant || variant.serviceId !== serviceId) {
       throw BadRequestError('Variant does not belong to the specified service')
     }

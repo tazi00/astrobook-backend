@@ -43,7 +43,8 @@ export async function errorHandlerPlugin(app: FastifyInstance) {
     }
 
     // JWT errors from @fastify/jwt
-    if (error.message.includes('jwt') || error.message.includes('token')) {
+    const msg = typeof error?.message === 'string' ? error.message : ''
+    if (msg.includes('jwt') || msg.includes('token')) {
       return reply.status(401).send({
         error: 'UNAUTHORIZED',
         message: 'Invalid or expired token',
