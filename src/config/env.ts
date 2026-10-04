@@ -41,6 +41,13 @@ const envSchema = z.object({
   // yeh kabhi true na ho — default false hai.
   SHOW_OTP_IN_RESPONSE: z.coerce.boolean().default(false),
 
+  // Google Play review test account — Play Console "App access" mein reviewer
+  // ko yeh phone + OTP diya jaata hai (reviewer ko real WhatsApp OTP nahi
+  // milta). Dono set hone par hi bypass active hota hai; unset = feature off.
+  // Phone canonical "+91XXXXXXXXXX" format mein, OTP 4 digits.
+  REVIEW_TEST_PHONE: z.string().regex(/^\+91[6-9]\d{9}$/).optional(),
+  REVIEW_TEST_OTP: z.string().regex(/^\d{4}$/).optional(),
+
   // Google OAuth
   GOOGLE_CLIENT_ID: z.string().optional(),
 

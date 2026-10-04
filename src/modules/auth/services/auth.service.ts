@@ -34,6 +34,12 @@ function toWhatsAppFormat(phone: string): string {
   return digits // already has country code (e.g. "91XXXXXXXXXX")
 }
 
+// Google Play reviewer ka test account: sirf tab active jab REVIEW_TEST_PHONE
+// aur REVIEW_TEST_OTP dono env mein set hon.
+function isReviewTestPhone(phone: string): boolean {
+  return !!env.REVIEW_TEST_PHONE && !!env.REVIEW_TEST_OTP && phone === env.REVIEW_TEST_PHONE
+}
+
 export async function sendOtpSms(phone: string, otp: string): Promise<void> {
   // Dev mode mein bhi console log rakha hai (quick visual confirm ke liye),
   // lekin ab yahin return nahi karte — WhatsApp abhi active testing mein
@@ -76,6 +82,11 @@ export class AuthService {
   // ── Send OTP ────────────────────────────────────────────────────────────────
 
   async sendOtp(phone: string): Promise<{ otp: string }> {
+    // Review test account: na rate-limit, na DB row, na WhatsApp call.
+    if (isReviewTestPhone(phone)) {
+      return { otp: env.REVIEW_TEST_OTP! }
+    }
+
     const recentCount = await this.userRepository.countRecentOtpRequests(phone)
     if (recentCount >= 3) {
       throw RateLimitError('Bahut zyada OTP requests. 10 min baad try karo.')
@@ -110,6 +121,26 @@ export class AuthService {
   // ── Verify OTP ──────────────────────────────────────────────────────────────
 
   async verifyOtp(phone: string, otp: string): Promise<AuthResponse> {
+    // Review test account: fixed OTP seedha accept, OTP table skip. Baaki
+    // flow (user find/create + tokens) normal hi chalta hai.
+    if (isReviewTestPhone(phone)) {
+      if (otp !== env.REVIEW_TEST_OTP) {
+        throw BadRequestError('Wrong OTP')
+      }
+      let testUser = await this.userRepository.findByPhone(phone)
+      const isNewTestUser = !testUser
+      if (!testUser) {
+        testUser = await this.userRepository.createUser(phone)
+      }
+      const tokens = await this._createTokens(testUser)
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        user: this._formatUser(testUser),
+        isNewUser: isNewTestUser,
+      }
+    }
+
     const otpRecord = await this.userRepository.findLatestOtp(phone)
 
     if (env.NODE_ENV === 'development') {
