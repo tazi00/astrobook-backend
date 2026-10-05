@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import {
   BanUserSchema,
+  EarningsQuerySchema,
+  ListAppointmentsQuerySchema,
   ListAstrologersQuerySchema,
   ListPostsQuerySchema,
   ListUsersQuerySchema,
@@ -140,6 +142,20 @@ export class AdminController {
     const { id } = request.params as { id: string }
     await this.adminService.deletePost(id)
     return reply.status(200).send({ message: 'Post removed' })
+  }
+
+  // GET /admin/appointments — all appointments, paginated + filtered
+  listAppointments = async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = ListAppointmentsQuerySchema.parse(request.query)
+    const result = await this.adminService.listAppointments(query)
+    return reply.status(200).send(result)
+  }
+
+  // GET /admin/earnings — per-astrologer revenue breakdown
+  getEarningsSummary = async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = EarningsQuerySchema.parse(request.query)
+    const result = await this.adminService.getEarningsSummary(query)
+    return reply.status(200).send(result)
   }
 
   // GET /admin/transactions — current payment state ledger for reconciliation

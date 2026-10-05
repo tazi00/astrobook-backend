@@ -1,5 +1,6 @@
 import type { Database } from '@/core/database/client'
 import {
+  appointments,
   astrologerProfiles,
   consultationServices,
   consultationServiceVariants,
@@ -8,7 +9,7 @@ import {
   posts,
   users,
 } from '@/core/database/schema'
-import { and, count, desc, eq, ilike, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, gte, ilike, lte, or, sql, sum } from 'drizzle-orm'
 import type {
   ListAstrologersQueryDto,
   ListPostsQueryDto,
@@ -385,5 +386,98 @@ export class AdminRepository {
   async postExists(postId: string) {
     const [row] = await this.db.select({ id: posts.id }).from(posts).where(eq(posts.id, postId)).limit(1)
     return !!row
+  }
+
+  // ── Earnings: per-astrologer revenue breakdown ────────────────────────────
+  // "completed" appointments ka price sum, grouped by astrologer.
+  // commissionPercentage user.meta JSONB se nikalta hai.
+  async getEarningsSummary(opts: {
+    page: number
+    limit: number
+    astrologerId?: string
+    dateFrom?: string
+    dateTo?: string
+  }) {
+    const { page, limit, astrologerId, dateFrom, dateTo } = opts
+    const offset = (page - 1) * limit
+
+    // Sub-conditions on appointments
+    const appointmentConditions: any[] = [eq(appointments.status, 'completed')]
+    if (astrologerId) appointmentConditions.push(eq(appointments.astrologerId, astrologerId))
+    if (dateFrom) appointmentConditions.push(gte(appointments.scheduledAt, new Date(`${dateFrom}T00:00:00.000Z`)))
+    if (dateTo) appointmentConditions.push(lte(appointments.scheduledAt, new Date(`${dateTo}T23:59:59.999Z`)))
+
+    const where = and(...appointmentConditions)
+
+    // Raw SQL for aggregation with JSONB commission extraction
+    const rows = await this.db.execute<{
+      astrologer_id: string
+      astrologer_name: string | null
+      avatar_url: string | null
+      total_sessions: number
+      gross_revenue: string
+      commission_pct: number
+      platform_revenue: string
+      astrologer_payout: string
+    }>(sql`
+      SELECT
+        u.id                                                                AS astrologer_id,
+        u.name                                                              AS astrologer_name,
+        u.avatar_url                                                        AS avatar_url,
+        COUNT(a.id)::int                                                    AS total_sessions,
+        COALESCE(SUM(CAST(a.price AS numeric)), 0)::text                   AS gross_revenue,
+        COALESCE((u.meta->>'commissionPercentage')::numeric, 30)           AS commission_pct,
+        (COALESCE(SUM(CAST(a.price AS numeric)), 0)
+          * COALESCE((u.meta->>'commissionPercentage')::numeric, 30) / 100)::text
+                                                                           AS platform_revenue,
+        (COALESCE(SUM(CAST(a.price AS numeric)), 0)
+          * (1 - COALESCE((u.meta->>'commissionPercentage')::numeric, 30) / 100))::text
+                                                                           AS astrologer_payout
+      FROM ${appointments} a
+      JOIN ${users} u ON u.id = a.astrologer_id
+      WHERE ${where}
+      GROUP BY u.id, u.name, u.avatar_url, u.meta
+      ORDER BY COALESCE(SUM(CAST(a.price AS numeric)), 0) DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `)
+
+    const [totalRow] = await this.db.execute<{ cnt: number }>(sql`
+      SELECT COUNT(DISTINCT a.astrologer_id)::int AS cnt
+      FROM ${appointments} a
+      WHERE ${where}
+    `)
+
+    return { rows: rows.rows, total: totalRow?.cnt ?? 0 }
+  }
+
+  // Overall platform revenue summary (totals)
+  async getRevenueTotals(opts: { dateFrom?: string; dateTo?: string }) {
+    const conditions: any[] = [eq(appointments.status, 'completed')]
+    if (opts.dateFrom) conditions.push(gte(appointments.scheduledAt, new Date(`${opts.dateFrom}T00:00:00.000Z`)))
+    if (opts.dateTo) conditions.push(lte(appointments.scheduledAt, new Date(`${opts.dateTo}T23:59:59.999Z`)))
+    const where = and(...conditions)
+
+    const [row] = await this.db.execute<{
+      total_sessions: number
+      gross_revenue: string
+      platform_revenue: string
+    }>(sql`
+      SELECT
+        COUNT(a.id)::int                                                         AS total_sessions,
+        COALESCE(SUM(CAST(a.price AS numeric)), 0)::text                        AS gross_revenue,
+        COALESCE(SUM(
+          CAST(a.price AS numeric)
+          * COALESCE((u.meta->>'commissionPercentage')::numeric, 30) / 100
+        ), 0)::text                                                              AS platform_revenue
+      FROM ${appointments} a
+      JOIN ${users} u ON u.id = a.astrologer_id
+      WHERE ${where}
+    `)
+
+    return {
+      totalSessions: row?.total_sessions ?? 0,
+      grossRevenue: row?.gross_revenue ?? '0',
+      platformRevenue: row?.platform_revenue ?? '0',
+    }
   }
 }

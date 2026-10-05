@@ -67,3 +67,25 @@ export const UpdatePostSchema = z.object({
   content: z.string().min(1).max(2000),
 })
 export type UpdatePostDto = z.infer<typeof UpdatePostSchema>
+
+// ─── Appointments (admin list) ─────────────────────────────────────────────
+
+export const ListAppointmentsQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum(['pending', 'confirmed', 'ongoing', 'completed', 'cancelled']).optional(),
+  astrologerId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  dateFrom: z.string().optional(), // YYYY-MM-DD
+  dateTo: z.string().optional(),   // YYYY-MM-DD
+})
+export type ListAppointmentsQueryDto = z.infer<typeof ListAppointmentsQuerySchema>
+
+// ─── Earnings summary (per-astrologer revenue breakdown) ──────────────────
+
+export const EarningsQuerySchema = z.object({
+  dateFrom: z.string().optional(), // YYYY-MM-DD
+  dateTo: z.string().optional(),   // YYYY-MM-DD
+  astrologerId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+})
+export type EarningsQueryDto = z.infer<typeof EarningsQuerySchema>

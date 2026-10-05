@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, or, sql, inArray, lt, gt, desc } from 'drizzle-orm'
+import { eq, and, gte, lte, or, sql, inArray, lt, gt, desc, count } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { Database } from '@/core/database/client'
 import { appointments, consultationServices, users } from '@/core/database/schema'
@@ -200,6 +200,40 @@ export class AppointmentRepository {
     `)
     const nextDue = result.rows[0]?.next_due
     return nextDue ? new Date(nextDue) : null
+  }
+
+  // ── Admin: full paginated list with filters ───────────────────────────────
+  async listForAdmin(opts: {
+    page: number
+    limit: number
+    status?: string
+    astrologerId?: string
+    userId?: string
+    dateFrom?: string
+    dateTo?: string
+  }) {
+    const { page, limit, status, astrologerId, userId, dateFrom, dateTo } = opts
+    const offset = (page - 1) * limit
+
+    const conditions: ReturnType<typeof eq>[] = []
+    if (status) conditions.push(eq(appointments.status, status as any))
+    if (astrologerId) conditions.push(eq(appointments.astrologerId, astrologerId))
+    if (userId) conditions.push(eq(appointments.userId, userId))
+    if (dateFrom) conditions.push(gte(appointments.scheduledAt, new Date(`${dateFrom}T00:00:00.000Z`)))
+    if (dateTo) conditions.push(lte(appointments.scheduledAt, new Date(`${dateTo}T23:59:59.999Z`)))
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined
+
+    const [rows, [totalRow]] = await Promise.all([
+      this.baseDetailQuery(this.db)
+        .where(where)
+        .orderBy(desc(appointments.scheduledAt))
+        .limit(limit)
+        .offset(offset),
+      this.db.select({ value: count() }).from(appointments).where(where),
+    ])
+
+    return { rows, total: totalRow?.value ?? 0 }
   }
 
   async markReminderSent(id: string) {

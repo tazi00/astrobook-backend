@@ -361,6 +361,58 @@ export async function adminRoutes(app: FastifyInstance) {
     adminController.deletePost,
   )
 
+  // ── Appointments (admin view) ───────────────────────────────────────────────
+
+  app.get(
+    `${prefix}/appointments`,
+    {
+      preHandler: guard,
+      schema: {
+        tags: ['Admin'],
+        summary: 'List all appointments — filter by status, astrologer, user, date range',
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 100 },
+            status: { type: 'string', enum: ['pending', 'confirmed', 'ongoing', 'completed', 'cancelled'] },
+            astrologerId: { type: 'string', format: 'uuid' },
+            userId: { type: 'string', format: 'uuid' },
+            dateFrom: { type: 'string' },
+            dateTo: { type: 'string' },
+          },
+        },
+      },
+    },
+    adminController.listAppointments,
+  )
+
+  // ── Earnings summary ────────────────────────────────────────────────────────
+
+  app.get(
+    `${prefix}/earnings`,
+    {
+      preHandler: guard,
+      schema: {
+        tags: ['Admin'],
+        summary: 'Per-astrologer earnings breakdown — GMV, commission, astrologer payout',
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 100 },
+            astrologerId: { type: 'string', format: 'uuid' },
+            dateFrom: { type: 'string' },
+            dateTo: { type: 'string' },
+          },
+        },
+      },
+    },
+    adminController.getEarningsSummary,
+  )
+
   // ── Transactions / Payment Reconciliation ───────────────────────────────────
   // Two endpoints:
   //   /admin/transactions      → current payment states (one row per payment)

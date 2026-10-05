@@ -22,6 +22,8 @@ import ImageKit from 'imagekit'
 import type { AdminRepository } from '../repositories/admin.repository'
 import type {
   BanUserDto,
+  EarningsQueryDto,
+  ListAppointmentsQueryDto,
   ListAstrologersQueryDto,
   ListPostsQueryDto,
   ListUsersQueryDto,
@@ -277,6 +279,47 @@ export class AdminService {
   // refund concept existed pre-Cashfree) ──────────────────────────────────
   // async listPendingRefunds() { ... }
   // async approveRefund(paymentId: string) { ... }
+
+  // ── Appointments (admin view) ─────────────────────────────────────────────
+
+  async listAppointments(query: ListAppointmentsQueryDto) {
+    const { rows, total } = await this.appointmentRepository.listForAdmin({
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+      astrologerId: query.astrologerId,
+      userId: query.userId,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+    })
+    return {
+      appointments: rows,
+      meta: paginationMeta(total, query.page, query.limit),
+    }
+  }
+
+  // ── Earnings summary ──────────────────────────────────────────────────────
+
+  async getEarningsSummary(query: EarningsQueryDto) {
+    const [{ rows, total }, totals] = await Promise.all([
+      this.adminRepository.getEarningsSummary({
+        page: query.page,
+        limit: query.limit,
+        astrologerId: query.astrologerId,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+      }),
+      this.adminRepository.getRevenueTotals({
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
+      }),
+    ])
+    return {
+      summary: rows,
+      totals,
+      meta: paginationMeta(total, query.page, query.limit),
+    }
+  }
 
   // ── Posts (moderation) ──────────────────────────────────────────────────────
 
