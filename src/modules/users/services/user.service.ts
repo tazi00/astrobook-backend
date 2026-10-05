@@ -1,6 +1,7 @@
 import { BadRequestError, ConflictError, NotFoundError, RateLimitError, ForbiddenError } from '@/core/errors'
 import { sendOtpSms } from '@/modules/auth'
 import { toCanonicalIndianPhone } from '@/core/utils/phone'
+import { env } from '@/config/env'
 import bcrypt from 'bcrypt'
 import type { UserRepository } from '../repositories/user.repository'
 import type {
@@ -211,10 +212,16 @@ export class UserService {
     return updatedUser
   }
 
-// ── Account deletion (anonymize) ────────────────────────────────────────────
+  // ── Account deletion (anonymize) ────────────────────────────────────────────
   async deleteAccount(userId: string) {
     const user = await this.userRepository.findById(userId)
     if (!user) throw NotFoundError('User not found')
+
+    // Google Play review test account ko delete hone se bachao — reviewer
+    // isko delete kar de to test user gone, aur dobara login nahi ho sakta.
+    if (env.REVIEW_TEST_PHONE && user.phone === env.REVIEW_TEST_PHONE) {
+      throw ForbiddenError('Review test account delete nahi ho sakta')
+    }
 
     if (user.role === 'admin') {
       throw ForbiddenError('Admin accounts yahan se delete nahi ho sakte')
