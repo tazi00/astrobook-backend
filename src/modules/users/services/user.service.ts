@@ -1,7 +1,6 @@
 import { BadRequestError, ConflictError, NotFoundError, RateLimitError, ForbiddenError } from '@/core/errors'
 import { sendOtpSms } from '@/modules/auth'
 import { toCanonicalIndianPhone } from '@/core/utils/phone'
-import { env } from '@/config/env'
 import bcrypt from 'bcrypt'
 import type { UserRepository } from '../repositories/user.repository'
 import type {
@@ -42,6 +41,7 @@ export class UserService {
 
     return {
       ...user,
+      hasGoogle: !!user.googleId,
       payoutMethod: astrologerProfile?.payoutDetails ? astrologerProfile.payoutMethod : null,
     }
   }
@@ -53,7 +53,34 @@ export class UserService {
       throw NotFoundError('User not found')
     }
 
-    return this.userRepository.updateProfile(userId, dto)
+    const { email, ...rest } = dto
+    const patch: typeof dto = { ...rest }
+
+    if (email && email !== user.email?.toLowerCase()) {
+      // Google-login accounts: email Google ne verify kiya hai aur login
+      // linking isi par chalti hai — isse badalne se account tootega.
+      if (user.googleId) {
+        throw BadRequestError('Google account ka email change nahi ho sakta')
+      }
+
+      const owner = await this.userRepository.findByEmail(email)
+      if (owner && owner.id !== userId) {
+        throw ConflictError('Yeh email already kisi aur account se linked hai')
+      }
+      patch.email = email
+    }
+
+    try {
+      const updated = await this.userRepository.updateProfile(userId, patch)
+      return updated ? { ...updated, hasGoogle: !!updated.googleId } : updated
+    } catch (err: any) {
+      // Do requests ek saath same email pe — pre-check dono pass ho gaye,
+      // DB ka unique constraint ne rok diya.
+      if (err?.code === '23505' || err?.cause?.code === '23505') {
+        throw ConflictError('Yeh email already kisi aur account se linked hai')
+      }
+      throw err
+    }
   }
 
   // ── Astrologer application ──────────────────────────────────────────────────
@@ -212,16 +239,10 @@ export class UserService {
     return updatedUser
   }
 
-  // ── Account deletion (anonymize) ────────────────────────────────────────────
+// ── Account deletion (anonymize) ────────────────────────────────────────────
   async deleteAccount(userId: string) {
     const user = await this.userRepository.findById(userId)
     if (!user) throw NotFoundError('User not found')
-
-    // Google Play review test account ko delete hone se bachao — reviewer
-    // isko delete kar de to test user gone, aur dobara login nahi ho sakta.
-    if (env.REVIEW_TEST_PHONE && user.phone === env.REVIEW_TEST_PHONE) {
-      throw ForbiddenError('Review test account delete nahi ho sakta')
-    }
 
     if (user.role === 'admin') {
       throw ForbiddenError('Admin accounts yahan se delete nahi ho sakte')

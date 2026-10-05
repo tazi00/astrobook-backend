@@ -32,6 +32,11 @@ export class UserRepository {
     return user ?? null
   }
 
+  async findByEmail(email: string) {
+    const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1)
+    return user ?? null
+  }
+
   async findByPhone(phone: string) {
     const [user] = await this.db.select().from(users).where(eq(users.phone, phone)).limit(1)
     return user ?? null

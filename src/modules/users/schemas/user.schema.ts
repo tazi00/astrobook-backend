@@ -37,6 +37,10 @@ export const OnboardingSchema = z.object({
 
 export const UpdateProfileSchema = z.object({
   name:        z.string().min(2).max(255).optional(),
+  // Normalize (trim + lowercase) so "Foo@Gmail.com" aur "foo@gmail.com" ek hi
+  // email maane jaayein — warna unique constraint case-sensitive hone se
+  // duplicate nikal sakta hai.
+  email:       z.string().trim().toLowerCase().email('Valid email daalo').max(255).optional(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   interests:   interestsField,
   avatarUrl:   z.string().url().optional(),

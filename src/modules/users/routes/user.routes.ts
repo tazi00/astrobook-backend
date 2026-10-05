@@ -126,6 +126,8 @@ export async function userRoutes(app: FastifyInstance) {
               // here (fast-json-stringify only serializes declared
               // properties) — so it must be declared, not just returned.
               payoutMethod: { type: ['string', 'null'] },
+              // true => email Google ne verify kiya hai, app mein read-only
+              hasGoogle: { type: 'boolean' },
             },
           },
         },
@@ -147,6 +149,9 @@ export async function userRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             name: { type: 'string', minLength: 2 },
+            // Declared here on purpose: Fastify's AJV strips undeclared body
+            // props, so without this the email never reaches the controller.
+            email: { type: 'string', maxLength: 255 },
             dateOfBirth: { type: 'string' },
             interests: { type: 'array', items: { type: 'string' } },
             avatarUrl: { type: 'string' },
@@ -168,6 +173,7 @@ export async function userRoutes(app: FastifyInstance) {
               isAstrologer: { type: 'boolean' },
               avatarUrl: { type: ['string', 'null'] },
               bio: { type: ['string', 'null'] },
+              hasGoogle: { type: 'boolean' },
               createdAt: { type: 'string' },
               updatedAt: { type: 'string' },
             },
