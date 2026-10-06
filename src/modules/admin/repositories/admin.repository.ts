@@ -441,13 +441,13 @@ export class AdminRepository {
       LIMIT ${limit} OFFSET ${offset}
     `)
 
-    const [totalRow] = await this.db.execute<{ cnt: number }>(sql`
+    const totalResult = await this.db.execute<{ cnt: number }>(sql`
       SELECT COUNT(DISTINCT a.astrologer_id)::int AS cnt
       FROM ${appointments} a
       WHERE ${where}
     `)
 
-    return { rows: rows.rows, total: totalRow?.cnt ?? 0 }
+    return { rows: rows.rows, total: totalResult.rows[0]?.cnt ?? 0 }
   }
 
   // Overall platform revenue summary (totals)
@@ -457,7 +457,7 @@ export class AdminRepository {
     if (opts.dateTo) conditions.push(lte(appointments.scheduledAt, new Date(`${opts.dateTo}T23:59:59.999Z`)))
     const where = and(...conditions)
 
-    const [row] = await this.db.execute<{
+    const revenueResult = await this.db.execute<{
       total_sessions: number
       gross_revenue: string
       platform_revenue: string
@@ -474,6 +474,7 @@ export class AdminRepository {
       WHERE ${where}
     `)
 
+    const row = revenueResult.rows[0]
     return {
       totalSessions: row?.total_sessions ?? 0,
       grossRevenue: row?.gross_revenue ?? '0',
