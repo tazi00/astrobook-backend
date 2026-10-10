@@ -10,6 +10,7 @@ import { cartRoutes } from './modules/cart/routes/cart.routes'
 import { categoriesRoutes } from './modules/categories/routes/categories.routes'
 import { paymentRoutes } from './modules/payment/routes/payment.routes'
 import { postsRoutes } from './modules/posts'
+import { shareRoutes } from './modules/posts/routes/share.routes'
 import { favoritesRoutes } from './modules/favorites'
 import { reviewsRoutes } from './modules/reviews'
 import { followsRoutes } from './modules/follows'
@@ -105,6 +106,9 @@ export async function buildApp() {
       })
     },
   )
+
+  // Public share routes — NO api prefix (crawlers + Android App Links need clean paths)
+  await app.register(shareRoutes)
 
   // API routes
   const apiPrefix = `/api/${env.API_VERSION}`
