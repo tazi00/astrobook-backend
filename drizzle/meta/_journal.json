@@ -36,6 +36,13 @@
       "when": 1791810428312,
       "tag": "0004_perpetual_lightspeed",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792825784347,
+      "tag": "0005_silly_johnny_storm",
+      "breakpoints": true
     }
   ]
 }
