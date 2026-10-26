@@ -563,6 +563,30 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ── Payouts ───────────────────────────────────────────────────────────────
 
+  // GET /admin/payouts/history — same as /payouts but frontend calls this URL
+  // NOTE: static route (/history) MUST be registered before parameterised (:id)
+  app.get(
+    `${prefix}/payouts/history`,
+    {
+      preHandler: guard,
+      schema: {
+        tags: ['Admin'],
+        summary: 'Payout history — alias for /admin/payouts (paginated)',
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1 },
+            limit: { type: 'integer', minimum: 1, maximum: 100 },
+            status: { type: 'string', enum: ['pending', 'paid', 'failed'] },
+            astrologerId: { type: 'string', format: 'uuid' },
+          },
+        },
+      },
+    },
+    adminController.listPayouts,
+  )
+
   app.get(
     `${prefix}/payouts`,
     {
