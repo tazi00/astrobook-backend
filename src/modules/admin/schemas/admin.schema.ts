@@ -94,7 +94,7 @@ export type EarningsQueryDto = z.infer<typeof EarningsQuerySchema>
 
 export const ListLogsQuerySchema = z.object({
   service: z.string().optional(), // e.g. 'db' | 'cron' — omit for all
-  level: z.enum(['info', 'warn', 'error']).optional(),
+  level: z.enum(['debug', 'info', 'warn', 'error']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 })
 export type ListLogsQueryDto = z.infer<typeof ListLogsQuerySchema>
