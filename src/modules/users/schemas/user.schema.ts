@@ -155,6 +155,19 @@ export const VerifyPhoneOtpSchema = z.object({
 })
 export type VerifyPhoneOtpDto = z.infer<typeof VerifyPhoneOtpSchema>
 
+// PATCH /users/me/astrologer-profile — admin khud ke astrologer profile ke
+// fields update kare (bio, experience, languages, specializations, photoUrl).
+// requestAstrologerUpgrade se alag — woh ek fresh application hai, yeh sirf
+// existing approved profile ka edit hai.
+export const UpdateAstrologerProfileSchema = z.object({
+  bio:             z.string().min(20, 'Bio kam se kam 20 characters ka ho').max(1000).optional(),
+  experience:      z.number().int().min(0).max(70).optional(),
+  languages:       z.array(z.string()).min(1).optional(),
+  specializations: z.array(z.string()).min(1).optional(),
+  photoUrl:        z.string().url().optional(),
+})
+export type UpdateAstrologerProfileDto = z.infer<typeof UpdateAstrologerProfileSchema>
+
 export type OnboardingDto    = z.infer<typeof OnboardingSchema>
 export type UpdateProfileDto = z.infer<typeof UpdateProfileSchema>
 export type UserResponse     = z.infer<typeof UserResponseSchema>

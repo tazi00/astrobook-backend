@@ -184,6 +184,30 @@ export async function userRoutes(app: FastifyInstance) {
     userController.updateProfile
   )
 
+  // PATCH /users/me/astrologer-profile
+  app.patch(
+    `${prefix}/me/astrologer-profile`,
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Users'],
+        summary: 'Update astrologer profile fields (bio, experience, languages, specializations, photoUrl)',
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          properties: {
+            bio:             { type: 'string', minLength: 20, maxLength: 1000 },
+            experience:      { type: 'integer', minimum: 0, maximum: 70 },
+            languages:       { type: 'array', items: { type: 'string' }, minItems: 1 },
+            specializations: { type: 'array', items: { type: 'string' }, minItems: 1 },
+            photoUrl:        { type: 'string' },
+          },
+        },
+      },
+    },
+    userController.updateAstrologerProfile,
+  )
+
   // POST /users/request-astrologer-upgrade
   app.post(
     `${prefix}/request-astrologer-upgrade`,

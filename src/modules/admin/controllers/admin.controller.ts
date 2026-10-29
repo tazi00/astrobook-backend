@@ -43,9 +43,10 @@ export class AdminController {
     return reply.status(200).send(health)
   }
 
-  // GET /admin/upload-token
+  // GET /admin/upload-token (no-store to prevent browser caching same token)
   getUploadToken = async (_request: FastifyRequest, reply: FastifyReply) => {
     const token = this.adminService.getImageKitAuthToken()
+    reply.header('Cache-Control', 'no-store')
     return reply.status(200).send(token)
   }
 

@@ -21,6 +21,7 @@ import type {
   OnboardingDto,
   SavePayoutDetailsDto,
   RequestAstrologerUpgradeDto,
+  UpdateAstrologerProfileDto,
   UpdateProfileDto,
 } from '../schemas/user.schema'
 
@@ -114,6 +115,26 @@ export class UserRepository {
       })
       .returning()
     return profile ?? null
+  }
+
+  // ── Astrologer profile (approved) fields update ────────────────────────────
+  // Admin ya approved astrologer apna bio, experience, languages,
+  // specializations, photoUrl update kar sakta hai bina ek nayi application
+  // daale. Sirf diye hue fields update hote hain (partial patch).
+  async updateAstrologerProfile(userId: string, dto: UpdateAstrologerProfileDto) {
+    const patch: Record<string, any> = { updatedAt: sql`now()` }
+    if (dto.bio             !== undefined) patch.bio             = dto.bio
+    if (dto.experience      !== undefined) patch.experience      = dto.experience
+    if (dto.languages       !== undefined) patch.languages       = dto.languages
+    if (dto.specializations !== undefined) patch.specializations = dto.specializations
+    if (dto.photoUrl        !== undefined) patch.photoUrl        = dto.photoUrl
+
+    const [updated] = await this.db
+      .update(astrologerProfiles)
+      .set(patch)
+      .where(eq(astrologerProfiles.userId, userId))
+      .returning()
+    return updated ?? null
   }
 
   // ── Payout details (manual payouts, no Razorpay Route) ─────────────────────
