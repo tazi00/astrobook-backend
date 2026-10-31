@@ -60,9 +60,19 @@ export class UserRepository {
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
+    // Drizzle numeric columns expect string — convert coords if number
+    const { birthLat, birthLng, ...rest } = dto as UpdateProfileDto & {
+      birthLat?: number | string
+      birthLng?: number | string
+    }
     const [user] = await this.db
       .update(users)
-      .set({ ...dto, updatedAt: sql`now()` })
+      .set({
+        ...rest,
+        ...(birthLat != null ? { birthLat: String(birthLat) } : {}),
+        ...(birthLng != null ? { birthLng: String(birthLng) } : {}),
+        updatedAt: sql`now()`,
+      })
       .where(eq(users.id, userId))
       .returning()
     return user ?? null

@@ -45,6 +45,11 @@ export const UpdateProfileSchema = z.object({
   interests:   interestsField,
   avatarUrl:   z.string().url().optional(),
   bio:         z.string().max(500).optional(),
+  // ── Kundli ke liye birth details ────────────────────────────────────────────
+  birthTime:  z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, 'Format: HH:MM ya HH:MM:SS').optional(),
+  birthPlace: z.string().min(2).max(255).optional(),
+  birthLat:   z.number().min(-90).max(90).optional(),
+  birthLng:   z.number().min(-180).max(180).optional(),
 })
 
 // Astrologer bannе ke liye application — koi role/isAstrologer yahan se
